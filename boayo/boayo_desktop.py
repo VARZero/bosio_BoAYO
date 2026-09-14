@@ -143,13 +143,12 @@ def run_daemon(args):
                 status = state.get("output") or {}
                 yaw = math.degrees(status.get("sensor_yaw_mrad", 0) / 1000.0) * args.gaze_yaw_sign
                 pitch = math.degrees(status.get("sensor_pitch_mrad", 0) / 1000.0) * args.gaze_pitch_sign
-                before = repr(ui)
-                ui.gaze(yaw, pitch)
+                before = repr(ui)\r?\n                pointer_changed = False\r?\n                ui.gaze(yaw, pitch)
                 pointer = state.get("pointer") or {}
                 pointer_pose = (float(pointer.get("azimuth", 0.0)), float(pointer.get("elevation", 0.0)))
                 if getattr(run_daemon, "last_pointer", None) != pointer_pose:
                     run_daemon.last_pointer = pointer_pose
-                    run_daemon.mouse_deadline = now + 1.5
+                    run_daemon.mouse_deadline = now + 1.5\r?\n                    pointer_changed = True
                 if getattr(run_daemon, "mouse_deadline", 0.0) > now:
                     ui.mouse_gaze(*pointer_pose)
                 scroll_serial = int(pointer.get("scroll_serial", 0))
@@ -185,7 +184,7 @@ def run_daemon(args):
                         relocated = True
                 animated = ui.tick(now - last)
                 after = repr(ui)
-                if animated or before != after or pressed or relocated:
+                if animated or pointer_changed or before != after or pressed or relocated:
                     words, _ = pack_scene(ui.render(), args.m)
                     bosio.upload_scene_words(words)
                 last = now
@@ -232,3 +231,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
