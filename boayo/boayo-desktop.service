@@ -1,0 +1,18 @@
+[Unit]
+Description=BoAYO gaze-first spherical desktop
+Requires=bosio-window-manager.service
+After=bosio-window-manager.service
+
+[Service]
+Type=simple
+User=xilinx
+Group=xilinx
+WorkingDirectory=/home/xilinx/bosio_v2/boayo
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/usr/local/share/pynq-venv/bin/python3 -u /home/xilinx/bosio_v2/boayo/boayo_desktop.py --m 32 --launcher --apps /home/xilinx/bosio_v2/boayo/apps.json
+Restart=always
+RestartSec=3
+TimeoutStopSec=10
+
+[Install]
+WantedBy=multi-user.target

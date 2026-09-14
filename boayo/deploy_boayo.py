@@ -18,7 +18,7 @@ REMOTE_ROOT = "/home/xilinx/bosio_v2"
 REMOTE_APP = posixpath.join(REMOTE_ROOT, "boayo")
 BITSTREAM = posixpath.join(REMOTE_ROOT, "bitstream/bosio_output_disp.bit")
 PYTHON = "/usr/local/share/pynq-venv/bin/python3"
-FILES = ("boayo_ui.py", "boayo_shell.py", "boayo_desktop.py", "bosio_view_simulator.py", "apps.json")
+FILES = ("boayo_ui.py", "boayo_shell.py", "boayo_desktop.py", "bosio_view_simulator.py", "apps.json", "boayo-desktop.service")
 PY_FILES = tuple(name for name in FILES if name.endswith(".py"))
 
 
@@ -85,17 +85,15 @@ def deploy(ssh):
         f"ln -sfn {REMOTE_ROOT}/libbosio_compositor.so {REMOTE_APP}/libbosio_compositor.so",
     )
     command(ssh, f"cd {REMOTE_APP} && {PYTHON} -m py_compile {' '.join(PY_FILES)}")
+    command(ssh, f"sudo -n install -m 0644 {REMOTE_APP}/boayo-desktop.service /etc/systemd/system/boayo-desktop.service")
+    command(ssh, "sudo -n systemctl daemon-reload && sudo -n systemctl enable boayo-desktop.service")
     print(f"DEPLOYED {REMOTE_APP}")
 
 
 def start(ssh):
     command(ssh, "pkill -TERM -f '[b]oayo_desktop.py' || true")
-    launch = (
-        f"cd {REMOTE_APP} && setsid -f {PYTHON} -u boayo_desktop.py --m 32 --launcher --apps {REMOTE_APP}/apps.json "
-        "> /tmp/boayo.log 2>&1 < /dev/null &"
-    )
-    command(ssh, launch)
-    _, output, _ = command(ssh, "sleep 2; pgrep -af '[b]oayo_desktop.py' || true; tail -n 20 /tmp/boayo.log || true")
+    command(ssh, "sudo -n systemctl restart boayo-desktop.service")
+    _, output, _ = command(ssh, "sleep 2; systemctl is-active boayo-desktop.service; pgrep -af '[b]oayo_desktop.py' || true; journalctl -u boayo-desktop.service -n 10 --no-pager || true")
     print(output)
 
 

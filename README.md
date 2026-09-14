@@ -53,6 +53,14 @@ python boayo/deploy_boayo.py deploy-start
 python boayo/deploy_boayo.py status
 ```
 
+배포 시 `boayo-desktop.service`가 설치되고 활성화됩니다. 이후 PYNQ-Z2를 켜면
+SphericalWM 데몬이 시작된 다음 BoAYO 데스크톱이 자동 실행됩니다.
+
+```sh
+systemctl is-enabled boayo-desktop.service
+systemctl is-active boayo-desktop.service
+```
+
 BTN0은 시선으로 포커스된 항목을 선택하며 BTN1은 런처를 현재 시선 위치로 다시
 배치합니다. 자세한 구조는 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)를 참고하세요.
 
