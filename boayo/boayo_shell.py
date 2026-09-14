@@ -9,6 +9,7 @@ from __future__ import annotations
 import math
 import json
 import os
+import shlex
 import subprocess
 from dataclasses import dataclass
 
@@ -52,6 +53,7 @@ class BoayoShell:
         self.pointer = (-1.0, -1.0)
         self._drag_origin = None
         self._window_origin = None
+        self.auto_hide = False
 
     def caption_polygons(self):
         r = self.window
@@ -100,6 +102,9 @@ class BoayoShell:
         self._drag_origin = None
         self._window_origin = None
         return released
+
+    def scroll(self, delta):
+        return False
 
     def _select_content(self, x, y):
         r = self.window
@@ -195,6 +200,7 @@ class BoayoLauncherShell(BoayoShell):
         self.selected_app = None
         self.active_app = None
         self.last_launch = None
+        self.scroll_offset = 0
 
     def caption_polygons(self):
         return {}
@@ -217,22 +223,48 @@ class BoayoLauncherShell(BoayoShell):
         col = int((x - left) / cell_width)
         row = int((y - top) / cell_height)
         index = row * 4 + col
+        index += self.scroll_offset
         if 0 <= col < 4 and 0 <= index < len(self.apps):
             self.selected_app = self.apps[index]
 
     def pointer_button(self, pressed):
         result = super().pointer_button(pressed)
         if not pressed and result == "content" and self.selected_app:
-            command = self.selected_app.get("command")
-            self.last_launch = self.selected_app.get("name", self.selected_app.get("id", "app"))
-            if command and os.path.isfile(command) and os.access(command, os.X_OK):
-                try:
-                    subprocess.Popen([command], start_new_session=True)
-                except OSError:
-                    pass
-            else:
-                self.active_app = self.selected_app
+            self.launch_app(self.selected_app)
         return result
+
+    @staticmethod
+    def _command_argv(command):
+        argv = shlex.split(str(command))
+        if argv and argv[0].endswith(".py"):
+            argv.insert(0, os.environ.get("PYTHON", "python3"))
+        return argv
+
+    def launch_app(self, app):
+        if not app:
+            return False
+        self.last_launch = app.get("name", app.get("id", "app"))
+        command = app.get("command")
+        if command:
+            argv = self._command_argv(command)
+            target = argv[1] if argv and argv[0].endswith(("python", "python3")) and len(argv) > 1 else (argv[0] if argv else "")
+            if argv and (not os.path.isabs(target) or os.path.isfile(target)):
+                try:
+                    subprocess.Popen(argv, start_new_session=True)
+                    self.active_app = app
+                    return True
+                except (OSError, ValueError):
+                    pass
+        self.active_app = app
+        return False
+
+    def scroll(self, delta):
+        if self.active_app is not None or len(self.apps) < 2:
+            return False
+        before = self.scroll_offset
+        self.scroll_offset = max(0, min(len(self.apps) - 1,
+                                        self.scroll_offset - (1 if delta > 0 else -1)))
+        return before != self.scroll_offset
 
     def _render_builtin_app(self, canvas):
         app = self.active_app
@@ -255,6 +287,9 @@ class BoayoLauncherShell(BoayoShell):
     def render(self):
         canvas = self.surface
         if self.active_app is not None:
+            if not self.visible:
+                canvas.clear(BLACK)
+                return canvas.image()
             return self._render_builtin_app(canvas)
         canvas.clear(BLACK)
         if not self.visible:
@@ -277,18 +312,24 @@ class BoayoLauncherShell(BoayoShell):
         # Re-center action remains available without a caption bar.
         canvas.rounded_rect(x + 24, y + height - 62, split - x - 44, 34, 8, WHITE)
         canvas.text("CENTER", x + 38, y + height - 52, (45, 93, 161), scale=2)
-        grid_x, grid_y = split + 22, y + 26
-        cell_w = max(1, int((x + width - grid_x - 20) / 4))
-        for index, app in enumerate(self.apps[:12]):
-            col, row = index % 4, index // 4
-            bx, by = grid_x + col * cell_w, grid_y + row * 72
+        list_x, list_y = split + 20, y + 22
+        row_h = 54
+        visible = max(1, min(5, int((height - 38) / row_h)))
+        for row in range(visible):
+            index = self.scroll_offset + row
+            if index >= len(self.apps):
+                break
+            app = self.apps[index]
+            bx, by = list_x, list_y + row * row_h
             selected = app is self.selected_app
             if selected:
-                canvas.rounded_rect(bx + 2, by, cell_w - 8, 62, 10, (228, 239, 255))
+                canvas.rounded_rect(bx, by, x + width - bx - 18, row_h - 5, 9, (228, 239, 255))
             color = tuple(int(app.get("color", "#347CFF").lstrip("#")[i:i + 2], 16) for i in (0, 2, 4)) if isinstance(app.get("color"), str) and len(app.get("color", "").lstrip("#")) == 6 else ACCENT
-            canvas.rounded_rect(bx + 13, by + 5, 40, 40, 12, color)
-            label = str(app.get("name", app.get("id", "APP")))[:8]
-            canvas.text(label, bx + 8, by + 50, INK if not selected else ACCENT, scale=1)
+            canvas.rounded_rect(bx + 8, by + 5, 38, 38, 11, color)
+            label = str(app.get("name", app.get("id", "APP")))[:14]
+            canvas.text(label, bx + 56, by + 18, INK if not selected else ACCENT, scale=2)
+        if len(self.apps) > visible:
+            canvas.text("WHEEL", list_x + 8, y + height - 24, MUTED, scale=1)
         return canvas.image()
 
 
@@ -357,13 +398,19 @@ class BoayoScene:
         center, right, up = _basis(self.azimuth, self.elevation)
         dot = float(direction @ center)
         if dot <= 0:
+            if self.shell.auto_hide:
+                self.shell.visible = False
             self.shell.pointer_motion(-1, -1)
             return None
         x = float(direction @ right) / dot / math.tan(math.radians(self.width_deg / 2))
         y = float(direction @ up) / dot / math.tan(math.radians(self.height_deg / 2))
         if abs(x) > 1 or abs(y) > 1:
+            if self.shell.auto_hide:
+                self.shell.visible = False
             self.shell.pointer_motion(-1, -1)
             return None
+        if self.shell.auto_hide:
+            self.shell.visible = True
         px = (x + 1) * 0.5 * self.shell.width
         py = (1 - y) * 0.5 * self.shell.height
         return self.shell.pointer_motion(px, py)
@@ -377,6 +424,9 @@ class BoayoScene:
     def pointer_button(self, pressed):
         return self.shell.pointer_button(pressed)
 
+    def scroll(self, delta):
+        return self.shell.scroll(delta)
+
     def tick(self, seconds):
         return self.shell.tick(seconds)
 
@@ -384,21 +434,34 @@ class BoayoScene:
 class BoayoWorkspace:
     """Composite several independent BoAYo windows at distinct sphere poses."""
 
-    def __init__(self, m=16, base_azimuth=0.0, base_elevation=0.0, count=3):
+    def __init__(self, m=16, base_azimuth=0.0, base_elevation=0.0, count=3, launcher=False, apps_path=None):
         count = max(1, int(count))
-        offsets = ((-17.0, 2.0), (0.0, 0.0), (17.0, -2.0))
+        offsets = ((0.0, 0.0), (-17.0, 2.0), (17.0, -2.0))
         self.items = []
         for index in range(count):
             daz, delv = offsets[index % len(offsets)]
-            shell = BoayoShell(480, 280)
+            shell = (BoayoLauncherShell(520, 300, apps_path) if launcher and index == 0 else BoayoShell(480, 280))
             scene = BoayoScene(shell, m, base_azimuth + daz, base_elevation + delv, 26.0, 18.0)
             shell.selected_card = index % 3
             self.items.append((shell, scene))
         self.focused = 0
 
+    def add_panel(self, azimuth, elevation, app=None):
+        """Create a new execution panel at the current gaze direction."""
+        shell = BoayoLauncherShell(520, 300)
+        shell.auto_hide = True
+        if app is None:
+            app = {"id": "dashboard", "name": "Dashboard", "color": "#347CFF"}
+        shell.active_app = app
+        scene = BoayoScene(shell, self.items[0][1].m, azimuth, elevation, 34.0, 24.0)
+        self.items.append((shell, scene))
+        self.focused = len(self.items) - 1
+        return shell
+
     def gaze(self, azimuth, elevation):
         self.focused = None
-        for index, (shell, scene) in enumerate(self.items):
+        for index in range(len(self.items) - 1, -1, -1):
+            shell, scene = self.items[index]
             hit = scene.gaze(azimuth, elevation)
             if hit is not None and self.focused is None:
                 self.focused = index
@@ -408,6 +471,11 @@ class BoayoWorkspace:
         if self.focused is not None:
             return self.items[self.focused][0].pointer_button(pressed)
         return None
+
+    def scroll(self, delta):
+        if self.focused is not None:
+            return self.items[self.focused][0].scroll(delta)
+        return False
 
     def tick(self, seconds):
         return any(shell.tick(seconds) for shell, _ in self.items)

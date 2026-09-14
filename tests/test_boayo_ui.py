@@ -8,7 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "boayo"), str(ROOT / "vendor" / "bosio_SphericalWM" / "sw")]
 
 from boayo_ui import PANEL, BoayoSurface
-from boayo_shell import BoayoScene, BoayoShell
+from boayo_shell import BoayoScene, BoayoShell, BoayoLauncherShell, BoayoWorkspace
 from bosio_view_simulator import render_bosio_view
 
 
@@ -74,6 +74,25 @@ class BoayoUITests(unittest.TestCase):
         rgb = scene.render()
         self.assertEqual(rgb.shape, (20, 211, 64, 3))
         self.assertTrue(np.any(np.all(rgb > 230, axis=3)))
+
+    def test_workspace_adds_gaze_panel_and_hides_when_focus_leaves(self):
+        workspace = BoayoWorkspace(m=8, base_azimuth=0, base_elevation=0, count=1, launcher=True,
+                                   apps_path=ROOT / "boayo" / "apps.json")
+        self.assertEqual(len(workspace.items), 1)
+        panel = workspace.add_panel(20, 5, {"id": "demo", "name": "Demo", "color": "#347CFF"})
+        self.assertTrue(panel.auto_hide)
+        self.assertEqual(len(workspace.items), 2)
+        workspace.gaze(20, 5)
+        self.assertTrue(panel.visible)
+        workspace.gaze(170, -60)
+        self.assertFalse(panel.visible)
+
+    def test_launcher_scroll_changes_selected_row(self):
+        shell = BoayoLauncherShell(640, 360, ROOT / "boayo" / "apps.json")
+        self.assertFalse(shell.scroll(1))
+        self.assertEqual(shell.scroll_offset, 0)
+        self.assertTrue(shell.scroll(-1))
+        self.assertEqual(shell.scroll_offset, 1)
 
     def test_reconstructed_bosio_view(self):
         scene = BoayoScene(BoayoShell(320, 180), m=8).render()

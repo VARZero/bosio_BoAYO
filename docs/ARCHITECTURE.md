@@ -36,10 +36,13 @@ Run on PYNQ-Z2 with the existing BOSIO v2 bitstream and libraries:
 sudo python3 boayo_desktop.py --bitstream /path/to/bosio_v2.bit --m 16
 ```
 
-BTN0 activates the gaze-focused element and keeps move/resize active while
-held. BTN1 reopens the sample internal window after closing it. If sensor axes
-are reversed on a particular mounting, use `--gaze-yaw-sign -1` and/or
-`--gaze-pitch-sign -1`.
+BTN0 creates a new execution panel at the current IMU gaze and gives it focus.
+Execution panels are auto-hidden when gaze leaves them and reappear when the
+gaze returns. BTN1 recreates the launcher at the current gaze. A Linux evdev
+mouse supplies an independent spherical pointer: movement changes its gaze
+coordinate, the left button clicks, and the wheel scrolls the launcher list.
+Commands in `apps.json` are started as child processes; entries without a
+working command use the built-in application view.
 
 `libbosio_compositor.so` is not rebuilt or used for BoAYo caption composition.
 The existing scene-packing path remains usable unchanged.

@@ -1,7 +1,7 @@
 {
   "grid": { "columns": 4, "layout": "row-major" },
   "apps": [
-    { "id": "dashboard", "name": "Dashboard", "icon": "dashboard", "color": "#347CFF", "enabled": true, "order": 1 },
+    { "id": "dashboard", "name": "Dashboard", "icon": "dashboard", "color": "#347CFF", "command": "/home/xilinx/bosio_v2/boayo/boayo_example_app.py", "enabled": true, "order": 1 },
     { "id": "maps", "name": "Maps", "icon": "maps", "color": "#8566E8", "enabled": true, "order": 2 },
     { "id": "telemetry", "name": "Telemetry", "icon": "telemetry", "color": "#33B57A", "enabled": true, "order": 3 },
     { "id": "camera", "name": "Camera", "icon": "camera", "color": "#ED9450", "enabled": true, "order": 4 },

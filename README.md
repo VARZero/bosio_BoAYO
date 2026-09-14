@@ -61,8 +61,10 @@ systemctl is-enabled boayo-desktop.service
 systemctl is-active boayo-desktop.service
 ```
 
-BTN0은 시선으로 포커스된 항목을 선택하며 BTN1은 런처를 현재 시선 위치로 다시
-배치합니다. 자세한 구조는 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)를 참고하세요.
+BTN0은 현재 IMU 시선 위치에 새 실행 패널을 만들고 포커스를 옮깁니다. BTN1은
+런처를 현재 시선 위치로 다시 배치합니다. 마우스는 Linux evdev 포인터로 연결되어
+클릭과 휠 스크롤을 전달합니다. 자세한 구조는 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)를
+참고하세요.
 
 `apps.json`에 실행 가능한 `command`가 있으면 해당 프로그램을 시작합니다. 실행
 파일이 아직 없는 항목은 BoAYO 내장 앱 화면을 열기 때문에 버튼 동작을 즉시 확인할

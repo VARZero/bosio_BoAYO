@@ -59,6 +59,7 @@ def run_pynq(args):
     debouncer = ButtonDebouncer(driver.buttons.read_state(), 0.03)
     pressed = False
     last = time.monotonic()
+
     try:
         driver.upload(scene.render())
         driver.set_pose(0, 0, 0)
@@ -105,6 +106,14 @@ def run_daemon(args):
 
     pressed = False
     last = time.monotonic()
+
+    def make_ui(azimuth, elevation):
+        if args.launcher or args.windows > 1:
+            return BoayoWorkspace(args.m, azimuth, elevation, max(1, args.windows),
+                                  launcher=args.launcher, apps_path=args.apps)
+        return BoayoScene(BoayoShell(args.surface_width, args.surface_height), args.m,
+                          azimuth, elevation, args.width_deg, args.height_deg)
+
     with BosioWMClient("boayo-desktop", args.socket) as bosio:
         capabilities = bosio.ping().get("features", [])
         if "scene-stream" not in capabilities:
@@ -117,11 +126,7 @@ def run_daemon(args):
             current_pitch = math.degrees(status.get("sensor_pitch_mrad", 0) / 1000.0) * args.gaze_pitch_sign
             scene_azimuth = args.azimuth if args.fixed_origin else current_yaw
             scene_elevation = args.elevation if args.fixed_origin else current_pitch
-            shell_factory = lambda: BoayoLauncherShell(args.surface_width, args.surface_height, args.apps)
-            ui = (BoayoWorkspace(args.m, scene_azimuth, scene_elevation, args.windows)
-                  if args.windows > 1 else
-                  BoayoScene(shell_factory() if args.launcher else BoayoShell(args.surface_width, args.surface_height), args.m,
-                             scene_azimuth, scene_elevation, args.width_deg, args.height_deg))
+            ui = make_ui(scene_azimuth, scene_elevation)
             words, _ = pack_scene(ui.render(), args.m)
             bosio.upload_scene_words(words)
             print("BOAYO_READY via BOSIO daemon; BTN0=select/open BTN1=relocate launcher", flush=True)
@@ -133,20 +138,47 @@ def run_daemon(args):
                 pitch = math.degrees(status.get("sensor_pitch_mrad", 0) / 1000.0) * args.gaze_pitch_sign
                 before = repr(ui)
                 ui.gaze(yaw, pitch)
+                pointer = state.get("pointer") or {}
+                pointer_pose = (float(pointer.get("azimuth", 0.0)), float(pointer.get("elevation", 0.0)))
+                if getattr(run_daemon, "last_pointer", None) != pointer_pose:
+                    run_daemon.last_pointer = pointer_pose
+                    run_daemon.mouse_deadline = now + 1.5
+                if getattr(run_daemon, "mouse_deadline", 0.0) > now:
+                    ui.gaze(*pointer_pose)
+                scroll_serial = int(pointer.get("scroll_serial", 0))
+                if scroll_serial != getattr(run_daemon, "scroll_serial", scroll_serial):
+                    ui.scroll(float(pointer.get("scroll_delta", 0.0)))
+                    run_daemon.scroll_serial = scroll_serial
+                buttons = set(pointer.get("buttons", ()))
+                previous_buttons = getattr(run_daemon, "pointer_buttons", set())
+                for button in sorted(buttons - previous_buttons):
+                    if button == "left":
+                        ui.gaze(*pointer_pose)
+                        ui.pointer_button(True)
+                for button in sorted(previous_buttons - buttons):
+                    if button == "left":
+                        ui.gaze(*pointer_pose)
+                        ui.pointer_button(False)
+                run_daemon.pointer_buttons = buttons
                 relocated = False
                 for event in bosio.poll_button_events():
                     if event["button"] == 0:
                         pressed = event["pressed"]
-                        ui.pointer_button(pressed)
+                        if pressed and isinstance(ui, BoayoWorkspace):
+                            ui.gaze(yaw, pitch)
+                            ui.pointer_button(True)
+                            selected = None
+                            if ui.focused is not None:
+                                selected = getattr(ui.items[ui.focused][0], "selected_app", None)
+                            ui.add_panel(yaw, pitch, selected)
+                        elif not isinstance(ui, BoayoWorkspace):
+                            ui.pointer_button(pressed)
                     elif event["button"] == 1 and event["pressed"]:
                         # BTN1 is the launcher/recenter action. Replace the
                         # complete scene so old windows disappear and the
                         # launcher is anchored at the current gaze pose.
                         scene_azimuth, scene_elevation = yaw, pitch
-                        ui = (BoayoWorkspace(args.m, scene_azimuth, scene_elevation, args.windows)
-                              if args.windows > 1 else
-                              BoayoScene(shell_factory() if args.launcher else BoayoShell(args.surface_width, args.surface_height), args.m,
-                                         scene_azimuth, scene_elevation, args.width_deg, args.height_deg))
+                        ui = make_ui(scene_azimuth, scene_elevation)
                         relocated = True
                 animated = ui.tick(now - last)
                 after = repr(ui)
