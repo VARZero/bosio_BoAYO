@@ -1,0 +1,3 @@
+[submodule "vendor/bosio_SphericalWM"]
+	path = vendor/bosio_SphericalWM
+	url = https://github.com/VARZero/bosio_SphericalWM.git
