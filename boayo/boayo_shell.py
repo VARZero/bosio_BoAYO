@@ -51,6 +51,7 @@ class BoayoShell:
         self.selected_card = 0
         self.focus_amount = {name: 0.0 for name in ("resize_left", "close", "move", "resize_right")}
         self.pointer = (-1.0, -1.0)
+        self.pointer_source = None
         self._drag_origin = None
         self._window_origin = None
         self.auto_hide = False
@@ -81,6 +82,21 @@ class BoayoShell:
             self._apply_drag(x, y)
         self.hovered = self.hit_test(x, y) if self.visible else None
         return self.hovered
+
+    def mouse_motion(self, x, y):
+        self.pointer_source = "mouse"
+        return self.pointer_motion(x, y)
+
+    def _draw_cursor(self, canvas):
+        if self.pointer_source != "mouse":
+            return
+        x, y = self.pointer
+        if not (0 <= x < self.width and 0 <= y < self.height):
+            return
+        canvas.circle(x, y, 9, (20, 28, 42))
+        canvas.circle(x, y, 6, (250, 250, 249))
+        canvas.rect(x + 5, y - 1, 12, 3, (20, 28, 42))
+        canvas.rect(x - 1, y + 5, 3, 12, (20, 28, 42))
 
     def pointer_normalized(self, u, v):
         return self.pointer_motion(float(u) * self.width, float(v) * self.height)
@@ -167,6 +183,7 @@ class BoayoShell:
             if name == "close":
                 color = self._mix((116, 30, 30), (255, 96, 78), amount)
             canvas.rounded_polygon(scaled_polygon(points, scale), 6 + amount * 2, color)
+        self._draw_cursor(canvas)
         return canvas.image()
 
     def _draw_content(self, canvas, r):
@@ -290,7 +307,9 @@ class BoayoLauncherShell(BoayoShell):
             if not self.visible:
                 canvas.clear(BLACK)
                 return canvas.image()
-            return self._render_builtin_app(canvas)
+            image = self._render_builtin_app(canvas)
+            self._draw_cursor(canvas)
+            return image
         canvas.clear(BLACK)
         if not self.visible:
             return canvas.image()
@@ -330,6 +349,7 @@ class BoayoLauncherShell(BoayoShell):
             canvas.text(label, bx + 56, by + 18, INK if not selected else ACCENT, scale=2)
         if len(self.apps) > visible:
             canvas.text("WHEEL", list_x + 8, y + height - 24, MUTED, scale=1)
+        self._draw_cursor(canvas)
         return canvas.image()
 
 
@@ -394,6 +414,7 @@ class BoayoScene:
         return np.clip(np.rint(sampled), 0, 255).astype(np.uint8)
 
     def gaze(self, azimuth, elevation):
+        self.shell.pointer_source = None
         direction = _direction(azimuth, elevation)
         center, right, up = _basis(self.azimuth, self.elevation)
         dot = float(direction @ center)
@@ -414,6 +435,22 @@ class BoayoScene:
         px = (x + 1) * 0.5 * self.shell.width
         py = (1 - y) * 0.5 * self.shell.height
         return self.shell.pointer_motion(px, py)
+
+    def mouse_gaze(self, azimuth, elevation):
+        direction = _direction(azimuth, elevation)
+        center, right, up = _basis(self.azimuth, self.elevation)
+        dot = float(direction @ center)
+        if dot <= 0:
+            self.shell.mouse_motion(-1, -1)
+            return None
+        x = float(direction @ right) / dot / math.tan(math.radians(self.width_deg / 2))
+        y = float(direction @ up) / dot / math.tan(math.radians(self.height_deg / 2))
+        if abs(x) > 1 or abs(y) > 1:
+            self.shell.mouse_motion(-1, -1)
+            return None
+        px = (x + 1) * 0.5 * self.shell.width
+        py = (1 - y) * 0.5 * self.shell.height
+        return self.shell.mouse_motion(px, py)
 
     def render(self):
         self.rgb[:] = BLACK
@@ -472,6 +509,15 @@ class BoayoWorkspace:
         for index in range(len(self.items) - 1, -1, -1):
             shell, scene = self.items[index]
             hit = scene.gaze(azimuth, elevation)
+            if hit is not None and self.focused is None:
+                self.focused = index
+        return self.focused
+
+    def mouse_gaze(self, azimuth, elevation):
+        self.focused = None
+        for index in range(len(self.items) - 1, -1, -1):
+            shell, scene = self.items[index]
+            hit = scene.mouse_gaze(azimuth, elevation)
             if hit is not None and self.focused is None:
                 self.focused = index
         return self.focused

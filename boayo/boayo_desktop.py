@@ -144,7 +144,7 @@ def run_daemon(args):
                     run_daemon.last_pointer = pointer_pose
                     run_daemon.mouse_deadline = now + 1.5
                 if getattr(run_daemon, "mouse_deadline", 0.0) > now:
-                    ui.gaze(*pointer_pose)
+                    ui.mouse_gaze(*pointer_pose)
                 scroll_serial = int(pointer.get("scroll_serial", 0))
                 if scroll_serial != getattr(run_daemon, "scroll_serial", scroll_serial):
                     ui.scroll(float(pointer.get("scroll_delta", 0.0)))
@@ -153,11 +153,11 @@ def run_daemon(args):
                 previous_buttons = getattr(run_daemon, "pointer_buttons", set())
                 for button in sorted(buttons - previous_buttons):
                     if button == "left":
-                        ui.gaze(*pointer_pose)
+                        ui.mouse_gaze(*pointer_pose)
                         ui.pointer_button(True)
                 for button in sorted(previous_buttons - buttons):
                     if button == "left":
-                        ui.gaze(*pointer_pose)
+                        ui.mouse_gaze(*pointer_pose)
                         ui.pointer_button(False)
                 run_daemon.pointer_buttons = buttons
                 relocated = False

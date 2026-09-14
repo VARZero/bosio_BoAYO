@@ -97,6 +97,12 @@ class BoayoUITests(unittest.TestCase):
         self.assertTrue(shell.scroll(-1))
         self.assertEqual(shell.scroll_offset, 1)
 
+    def test_mouse_cursor_is_rendered_on_panel(self):
+        shell = BoayoShell(320, 180)
+        shell.mouse_motion(160, 90)
+        image = shell.render()
+        self.assertTrue(np.any(np.all(image[84:97, 154:173] == (250, 250, 249), axis=2)))
+
     def test_reconstructed_bosio_view(self):
         scene = BoayoScene(BoayoShell(320, 180), m=8).render()
         view = render_bosio_view(scene, m=8, width=160, height=90)
