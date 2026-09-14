@@ -8,6 +8,8 @@ BoAYO는 완성된 구면 장면을 SphericalWM의 scene-stream IPC로 전달합
 셀은 bilinear 보간하며 글자와 모서리처럼 명암 차이가 큰 셀에는 adaptive 4×4
 supersampling을 적용합니다.
 
+기본 셀 분할도는 `M=32`이며 각 삼각 타일이 32×32개의 작은 삼각 셀을 갖습니다.
+
 ## 구성
 
 ```text

@@ -91,7 +91,7 @@ def deploy(ssh):
 def start(ssh):
     command(ssh, "pkill -TERM -f '[b]oayo_desktop.py' || true")
     launch = (
-        f"cd {REMOTE_APP} && setsid -f {PYTHON} -u boayo_desktop.py --m 16 --launcher --apps {REMOTE_APP}/apps.json "
+        f"cd {REMOTE_APP} && setsid -f {PYTHON} -u boayo_desktop.py --m 32 --launcher --apps {REMOTE_APP}/apps.json "
         "> /tmp/boayo.log 2>&1 < /dev/null &"
     )
     command(ssh, launch)

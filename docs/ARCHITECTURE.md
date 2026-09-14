@@ -33,7 +33,7 @@ python3 boayo_desktop.py --preview boayo-source.png --preview-source
 Run on PYNQ-Z2 with the existing BOSIO v2 bitstream and libraries:
 
 ```sh
-sudo python3 boayo_desktop.py --bitstream /path/to/bosio_v2.bit --m 16
+sudo python3 boayo_desktop.py --bitstream /path/to/bosio_v2.bit --m 32
 ```
 
 BTN0 activates the gaze-focused element and keeps move/resize active while

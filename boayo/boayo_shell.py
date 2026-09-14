@@ -284,7 +284,7 @@ def _basis(azimuth, elevation):
 class BoayoScene:
     """Maps the complete BoAYo shell canvas directly into BOSIO scene cells."""
 
-    def __init__(self, shell=None, m=16, azimuth=0.0, elevation=0.0, width_deg=48.0, height_deg=27.0):
+    def __init__(self, shell=None, m=32, azimuth=0.0, elevation=0.0, width_deg=48.0, height_deg=27.0):
         self.shell = shell or BoayoShell()
         self.m = int(m)
         self.azimuth, self.elevation = float(azimuth), float(elevation)
@@ -361,7 +361,7 @@ class BoayoScene:
 class BoayoWorkspace:
     """Composite several independent BoAYo windows at distinct sphere poses."""
 
-    def __init__(self, m=16, base_azimuth=0.0, base_elevation=0.0, count=3):
+    def __init__(self, m=32, base_azimuth=0.0, base_elevation=0.0, count=3):
         count = max(1, int(count))
         offsets = ((-17.0, 2.0), (0.0, 0.0), (17.0, -2.0))
         self.items = []
