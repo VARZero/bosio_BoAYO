@@ -483,6 +483,9 @@ class BoayoWorkspace:
             shell.selected_card = index % 3
             self.items.append((shell, scene))
         self.focused = 0
+        self.mouse_pose = (base_azimuth, base_elevation)
+        self.mouse_visible = False
+        self._cursor_rays = cell_rays(m).reshape(-1, 3).astype(np.float32)
 
     def add_panel(self, azimuth, elevation, app=None):
         """Create a new execution panel at the current gaze direction."""
@@ -512,6 +515,7 @@ class BoayoWorkspace:
         return self.add_panel(azimuth, elevation)
 
     def gaze(self, azimuth, elevation):
+        self.mouse_visible = False
         self.focused = None
         for index in range(len(self.items) - 1, -1, -1):
             shell, scene = self.items[index]
@@ -521,6 +525,8 @@ class BoayoWorkspace:
         return self.focused
 
     def mouse_gaze(self, azimuth, elevation):
+        self.mouse_pose = (float(azimuth), float(elevation))
+        self.mouse_visible = True
         self.focused = None
         for index in range(len(self.items) - 1, -1, -1):
             shell, scene = self.items[index]
@@ -550,4 +556,16 @@ class BoayoWorkspace:
             visible = np.any(source != np.asarray(BLACK, dtype=np.uint8), axis=-1)
             indices = np.ravel_multi_index(scene.destination, output.shape[:-1])
             output.reshape(-1, 3)[indices[visible]] = source[visible]
+        if self.mouse_visible:
+            target = _direction(*self.mouse_pose)
+            scores = self._cursor_rays @ target
+            center = int(np.argmax(scores))
+            flat = output.reshape(-1, 3)
+            # Draw a small high-contrast cursor directly on the sphere, even
+            # when the pointer is over the black background between panels.
+            flat[center] = (255, 255, 255)
+            for offset in (-1, 1, -2, 2):
+                index = center + offset
+                if 0 <= index < flat.shape[0]:
+                    flat[index] = (20, 28, 42)
         return output
