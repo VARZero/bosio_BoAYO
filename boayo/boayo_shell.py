@@ -486,10 +486,17 @@ class BoayoWorkspace:
 
     def add_panel(self, azimuth, elevation, app=None):
         """Create a new execution panel at the current gaze direction."""
+        # There is exactly one control/launcher panel. Running application
+        # windows remain in the scene and are never removed here.
+        m = self.items[0][1].m if self.items else 16
+        self.items = [
+            (old_shell, old_scene) for old_shell, old_scene in self.items
+            if not (isinstance(old_shell, BoayoLauncherShell) and old_shell.active_app is None)
+        ]
         shell = BoayoLauncherShell(640, 360)
         if app is not None:
             shell.selected_app = app
-        scene = BoayoScene(shell, self.items[0][1].m, azimuth, elevation, 42.0, 30.0)
+        scene = BoayoScene(shell, m, azimuth, elevation, 42.0, 30.0)
         self.items.append((shell, scene))
         self.focused = len(self.items) - 1
         return shell

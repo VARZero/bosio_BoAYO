@@ -81,14 +81,25 @@ class BoayoUITests(unittest.TestCase):
         self.assertEqual(len(workspace.items), 1)
         panel = workspace.add_panel(20, 5, {"id": "demo", "name": "Demo", "color": "#347CFF"})
         self.assertFalse(panel.auto_hide)
-        self.assertEqual(len(workspace.items), 2)
-        self.assertTrue(workspace.items[0][0].visible)
+        self.assertEqual(len(workspace.items), 1)
         self.assertIs(workspace.items[-1][0], panel)
-        self.assertIsNone(panel.active_app)
+        self.assertIs(panel.active_app, workspace.items[-1][0].active_app)
         workspace.gaze(20, 5)
         self.assertTrue(panel.visible)
         workspace.gaze(170, -60)
         self.assertTrue(panel.visible)
+
+    def test_new_launcher_replaces_only_the_old_launcher(self):
+        workspace = BoayoWorkspace(m=8, base_azimuth=0, base_elevation=0, count=1, launcher=True,
+                                   apps_path=ROOT / "boayo" / "apps.json")
+        app_window = workspace.add_panel(10, 0, {"id": "demo", "name": "Demo", "color": "#347CFF"})
+        app_window.active_app = {"id": "demo", "name": "Demo", "color": "#347CFF"}
+        launcher = workspace.add_panel(20, 0)
+        self.assertEqual(len(workspace.items), 2)
+        self.assertIs(workspace.items[-1][0], launcher)
+        self.assertIs(workspace.items[0][0], app_window)
+        self.assertIsNotNone(app_window.active_app)
+        self.assertIsNone(launcher.active_app)
 
     def test_launcher_scroll_changes_selected_row(self):
         shell = BoayoLauncherShell(640, 360, ROOT / "boayo" / "apps.json")
