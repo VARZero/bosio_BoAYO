@@ -231,17 +231,15 @@ class BoayoLauncherShell(BoayoShell):
             return []
 
     def _select_content(self, x, y):
+        # Each visible launcher row (icon + label) is one click target.
         r = self.window
         left = r.x + r.width * 0.34
-        top = r.y + 32
-        grid_width = r.width * 0.58
-        cell_width = grid_width / 4.0
-        cell_height = 72
-        col = int((x - left) / cell_width)
-        row = int((y - top) / cell_height)
-        index = row * 4 + col
-        index += self.scroll_offset
-        if 0 <= col < 4 and 0 <= index < len(self.apps):
+        right = r.x + r.width - 18
+        top = r.y + 22
+        row_height = 54
+        row = int((y - top) / row_height)
+        index = self.scroll_offset + row
+        if left <= x <= right and 0 <= row and 0 <= index < len(self.apps):
             self.selected_app = self.apps[index]
 
     def pointer_button(self, pressed):
