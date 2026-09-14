@@ -560,9 +560,9 @@ class BoayoWorkspace:
             scores = self._cursor_rays @ target
             center = int(np.argmax(scores))
             flat = output.reshape(-1, 3)
-            # Draw a large high-contrast marker directly on the sphere, even
+            # Draw a compact high-contrast marker directly on the sphere, even
             # when the pointer is over the black background between panels.
-            marker = scores >= math.cos(math.radians(4.5))
+            marker = scores >= math.cos(math.radians(2.4))
             flat[marker] = (238, 32, 92)
             flat[center] = (255, 255, 255)
         return output
