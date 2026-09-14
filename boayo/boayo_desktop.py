@@ -127,6 +127,13 @@ def run_daemon(args):
             scene_azimuth = args.azimuth if args.fixed_origin else current_yaw
             scene_elevation = args.elevation if args.fixed_origin else current_pitch
             ui = make_ui(scene_azimuth, scene_elevation)
+            # Start the independent mouse pointer over the visible launcher.
+            # The WM pointer defaults to (0,0), which may be far outside the
+            # IMU-anchored BoAYO scene.
+            try:
+                bosio.pointer_warp(scene_azimuth, scene_elevation)
+            except Exception:
+                pass
             words, _ = pack_scene(ui.render(), args.m)
             bosio.upload_scene_words(words)
             print("BOAYO_READY via BOSIO daemon; BTN0=select/open BTN1=relocate launcher", flush=True)
