@@ -28,8 +28,8 @@ SphericalWM scene-stream -> BOSIO OutputCore -> HDMI
 의존 저장소까지 함께 내려받습니다.
 
 ```sh
-git clone --recursive https://github.com/VARZero/BoAYO.git
-cd BoAYO
+git clone --recursive https://github.com/VARZero/bosio_BoAYO.git
+cd bosio_BoAYO
 python -m pip install -r requirements.txt
 ```
 
