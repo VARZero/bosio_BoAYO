@@ -440,27 +440,32 @@ class BoayoWorkspace:
         self.items = []
         for index in range(count):
             daz, delv = offsets[index % len(offsets)]
-            shell = (BoayoLauncherShell(520, 300, apps_path) if launcher and index == 0 else BoayoShell(480, 280))
-            if launcher and index == 0:
-                shell.auto_hide = True
-            scene = BoayoScene(shell, m, base_azimuth + daz, base_elevation + delv, 26.0, 18.0)
+            shell = (BoayoLauncherShell(640, 360, apps_path) if launcher and index == 0 else BoayoShell(640, 360))
+            scene = BoayoScene(shell, m, base_azimuth + daz, base_elevation + delv,
+                               42.0 if launcher else 26.0, 30.0 if launcher else 18.0)
             shell.selected_card = index % 3
             self.items.append((shell, scene))
         self.focused = 0
 
     def add_panel(self, azimuth, elevation, app=None):
         """Create a new execution panel at the current gaze direction."""
-        for old_shell, _ in self.items:
-            old_shell.visible = False
-        shell = BoayoLauncherShell(520, 300)
-        shell.auto_hide = True
-        if app is None:
-            app = {"id": "dashboard", "name": "Dashboard", "color": "#347CFF"}
-        shell.active_app = app
-        scene = BoayoScene(shell, self.items[0][1].m, azimuth, elevation, 34.0, 24.0)
+        shell = BoayoLauncherShell(640, 360)
+        if app is not None:
+            shell.selected_app = app
+        scene = BoayoScene(shell, self.items[0][1].m, azimuth, elevation, 42.0, 30.0)
         self.items.append((shell, scene))
         self.focused = len(self.items) - 1
         return shell
+
+    def recenter_launcher(self, azimuth, elevation):
+        for index, (shell, scene) in enumerate(self.items):
+            if isinstance(shell, BoayoLauncherShell) and shell.active_app is None:
+                scene.azimuth, scene.elevation = float(azimuth), float(elevation)
+                scene._build_map()
+                self.items.append(self.items.pop(index))
+                self.focused = len(self.items) - 1
+                return scene
+        return self.add_panel(azimuth, elevation)
 
     def gaze(self, azimuth, elevation):
         self.focused = None

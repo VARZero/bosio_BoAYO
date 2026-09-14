@@ -75,19 +75,20 @@ class BoayoUITests(unittest.TestCase):
         self.assertEqual(rgb.shape, (20, 211, 64, 3))
         self.assertTrue(np.any(np.all(rgb > 230, axis=3)))
 
-    def test_workspace_adds_gaze_panel_and_hides_when_focus_leaves(self):
+    def test_workspace_adds_gaze_panel_and_keeps_previous_visible(self):
         workspace = BoayoWorkspace(m=8, base_azimuth=0, base_elevation=0, count=1, launcher=True,
                                    apps_path=ROOT / "boayo" / "apps.json")
         self.assertEqual(len(workspace.items), 1)
         panel = workspace.add_panel(20, 5, {"id": "demo", "name": "Demo", "color": "#347CFF"})
-        self.assertTrue(panel.auto_hide)
+        self.assertFalse(panel.auto_hide)
         self.assertEqual(len(workspace.items), 2)
-        self.assertFalse(workspace.items[0][0].visible)
+        self.assertTrue(workspace.items[0][0].visible)
         self.assertIs(workspace.items[-1][0], panel)
+        self.assertIsNone(panel.active_app)
         workspace.gaze(20, 5)
         self.assertTrue(panel.visible)
         workspace.gaze(170, -60)
-        self.assertFalse(panel.visible)
+        self.assertTrue(panel.visible)
 
     def test_launcher_scroll_changes_selected_row(self):
         shell = BoayoLauncherShell(640, 360, ROOT / "boayo" / "apps.json")

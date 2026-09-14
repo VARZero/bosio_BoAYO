@@ -165,20 +165,16 @@ def run_daemon(args):
                     if event["button"] == 0:
                         pressed = event["pressed"]
                         if pressed and isinstance(ui, BoayoWorkspace):
-                            ui.gaze(yaw, pitch)
-                            ui.pointer_button(True)
-                            selected = None
-                            if ui.focused is not None:
-                                selected = getattr(ui.items[ui.focused][0], "selected_app", None)
-                            ui.add_panel(yaw, pitch, selected)
+                            ui.add_panel(yaw, pitch)
                         elif not isinstance(ui, BoayoWorkspace):
                             ui.pointer_button(pressed)
                     elif event["button"] == 1 and event["pressed"]:
-                        # BTN1 is the launcher/recenter action. Replace the
-                        # complete scene so old windows disappear and the
-                        # launcher is anchored at the current gaze pose.
+                        # BTN1 recenters the launcher while preserving running panels.
                         scene_azimuth, scene_elevation = yaw, pitch
-                        ui = make_ui(scene_azimuth, scene_elevation)
+                        if isinstance(ui, BoayoWorkspace):
+                            ui.recenter_launcher(scene_azimuth, scene_elevation)
+                        else:
+                            ui = make_ui(scene_azimuth, scene_elevation)
                         relocated = True
                 animated = ui.tick(now - last)
                 after = repr(ui)
