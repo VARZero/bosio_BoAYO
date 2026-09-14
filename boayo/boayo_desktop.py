@@ -170,6 +170,7 @@ def run_daemon(args):
                         ui.pointer_button(False)
                 run_daemon.pointer_buttons = buttons
                 relocated = False
+                pressed = False
                 for event in bosio.poll_button_events():
                     if event["button"] == 0:
                         pressed = event["pressed"]
@@ -177,6 +178,13 @@ def run_daemon(args):
                             ui.add_panel(yaw, pitch)
                         elif not isinstance(ui, BoayoWorkspace):
                             ui.pointer_button(pressed)
+                    elif event["button"] == 2 and event["pressed"]:
+                        # BTN2 clicks the current IMU gaze center.
+                        ui.mouse_gaze(yaw, pitch)
+                        ui.pointer_button(True)
+                        ui.pointer_button(False)
+                        ui.gaze(yaw, pitch)
+                        pointer_changed = True
                     elif event["button"] == 1 and event["pressed"]:
                         # BTN1 recenters the launcher while preserving running panels.
                         scene_azimuth, scene_elevation = yaw, pitch
