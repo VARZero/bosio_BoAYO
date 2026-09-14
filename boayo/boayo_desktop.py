@@ -163,7 +163,7 @@ def main():
     parser = argparse.ArgumentParser(description="BoAYo gaze-first desktop for BOSIO/PYNQ-Z2")
     parser.add_argument("--bitstream", default=str(Path(__file__).with_name("bosio_v2.bit")))
     parser.add_argument("--program-bitstream", action="store_true", help="program PL instead of attaching to an already running BOSIO core")
-    parser.add_argument("--m", type=int, choices=(8, 16, 32), default=32)
+    parser.add_argument("--m", type=int, choices=(8, 16, 32), default=16)
     parser.add_argument("--surface-width", type=int, default=640)
     parser.add_argument("--surface-height", type=int, default=360)
     parser.add_argument("--azimuth", type=float, default=0.0)

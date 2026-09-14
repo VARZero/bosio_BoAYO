@@ -36,7 +36,7 @@ def _rgb332(rgb):
     return np.stack((red, green, blue), axis=-1).astype(np.uint8)
 
 
-def render_bosio_view(scene_rgb, m=32, yaw=0.0, pitch=0.0, roll=0.0,
+def render_bosio_view(scene_rgb, m=16, yaw=0.0, pitch=0.0, roll=0.0,
                       fov_h=60.0, fov_v=45.0, width=1280, height=720):
     """Reconstruct one viewport by sampling BOSIO triangular cells."""
     scene = np.asarray(scene_rgb, dtype=np.uint8)
