@@ -193,6 +193,7 @@ class BoayoLauncherShell(BoayoShell):
         self.apps_path = apps_path or os.path.join(os.path.dirname(__file__), "apps.json")
         self.apps = self._load_apps()
         self.selected_app = None
+        self.active_app = None
         self.last_launch = None
 
     def caption_polygons(self):
@@ -224,15 +225,37 @@ class BoayoLauncherShell(BoayoShell):
         if not pressed and result == "content" and self.selected_app:
             command = self.selected_app.get("command")
             self.last_launch = self.selected_app.get("name", self.selected_app.get("id", "app"))
-            if command:
+            if command and os.path.isfile(command) and os.access(command, os.X_OK):
                 try:
-                    subprocess.Popen(command, shell=True, start_new_session=True)
+                    subprocess.Popen([command], start_new_session=True)
                 except OSError:
                     pass
+            else:
+                self.active_app = self.selected_app
         return result
+
+    def _render_builtin_app(self, canvas):
+        app = self.active_app
+        color_text = str(app.get("color", "#347CFF")).lstrip("#")
+        accent = tuple(int(color_text[i:i + 2], 16) for i in (0, 2, 4)) if len(color_text) == 6 else ACCENT
+        name = str(app.get("name", app.get("id", "APP"))).upper()
+        canvas.clear(BLACK)
+        canvas.rounded_rect(38, 28, self.width - 76, self.height - 56, 20, WHITE)
+        canvas.rounded_rect(58, 48, 58, 58, 14, accent)
+        canvas.text(name, 136, 61, INK, scale=3, bold=True)
+        canvas.text("BOAYO APPLICATION", 138, 88, MUTED, scale=1)
+        canvas.rounded_rect(58, 126, self.width - 116, 132, 14, PANEL)
+        canvas.text("APPLICATION READY", 82, 150, accent, scale=2, bold=True)
+        canvas.text("BTN1  BACK TO LAUNCHER", 82, 186, INK, scale=2)
+        canvas.text("GAZE + BTN0  SELECT", 82, 218, MUTED, scale=1)
+        canvas.rounded_rect(58, 278, self.width - 116, 10, 5, (211, 220, 230))
+        canvas.rounded_rect(58, 278, int((self.width - 116) * 0.72), 10, 5, accent)
+        return canvas.image()
 
     def render(self):
         canvas = self.surface
+        if self.active_app is not None:
+            return self._render_builtin_app(canvas)
         canvas.clear(BLACK)
         if not self.visible:
             return canvas.image()

@@ -59,6 +59,16 @@ class BoayoUITests(unittest.TestCase):
         shell.pointer_button(False)
         self.assertFalse(shell.visible)
 
+    def test_launcher_opens_builtin_when_command_is_missing(self):
+        from boayo_shell import BoayoLauncherShell
+        shell = BoayoLauncherShell(640, 360, ROOT / "boayo" / "apps.json")
+        shell.selected_app = shell.apps[0]
+        shell.hovered = "content"
+        shell.pointer_button(True)
+        shell.pointer_button(False)
+        self.assertEqual(shell.active_app["id"], "dashboard")
+        self.assertEqual(shell.render().shape, (360, 640, 3))
+
     def test_scene_is_complete_bosio_rgb(self):
         scene = BoayoScene(BoayoShell(320, 180), m=8)
         rgb = scene.render()
