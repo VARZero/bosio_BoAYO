@@ -484,7 +484,7 @@ class BoayoWorkspace:
             self.items.append((shell, scene))
         self.focused = 0
         self.mouse_pose = (base_azimuth, base_elevation)
-        self.mouse_visible = True
+        self.mouse_visible = False
         self._cursor_rays = cell_rays(m).reshape(-1, 3).astype(np.float32)
 
     def add_panel(self, azimuth, elevation, app=None):
@@ -525,7 +525,7 @@ class BoayoWorkspace:
 
     def mouse_gaze(self, azimuth, elevation):
         self.mouse_pose = (float(azimuth), float(elevation))
-        self.mouse_visible = True
+        self.mouse_visible = False
         self.focused = None
         for index in range(len(self.items) - 1, -1, -1):
             shell, scene = self.items[index]
@@ -566,3 +566,4 @@ class BoayoWorkspace:
             flat[marker] = (238, 32, 92)
             flat[center] = (255, 255, 255)
         return output
+
