@@ -82,6 +82,8 @@ class BoayoUITests(unittest.TestCase):
         panel = workspace.add_panel(20, 5, {"id": "demo", "name": "Demo", "color": "#347CFF"})
         self.assertTrue(panel.auto_hide)
         self.assertEqual(len(workspace.items), 2)
+        self.assertFalse(workspace.items[0][0].visible)
+        self.assertIs(workspace.items[-1][0], panel)
         workspace.gaze(20, 5)
         self.assertTrue(panel.visible)
         workspace.gaze(170, -60)

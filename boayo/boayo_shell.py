@@ -441,6 +441,8 @@ class BoayoWorkspace:
         for index in range(count):
             daz, delv = offsets[index % len(offsets)]
             shell = (BoayoLauncherShell(520, 300, apps_path) if launcher and index == 0 else BoayoShell(480, 280))
+            if launcher and index == 0:
+                shell.auto_hide = True
             scene = BoayoScene(shell, m, base_azimuth + daz, base_elevation + delv, 26.0, 18.0)
             shell.selected_card = index % 3
             self.items.append((shell, scene))
@@ -448,6 +450,8 @@ class BoayoWorkspace:
 
     def add_panel(self, azimuth, elevation, app=None):
         """Create a new execution panel at the current gaze direction."""
+        for old_shell, _ in self.items:
+            old_shell.visible = False
         shell = BoayoLauncherShell(520, 300)
         shell.auto_hide = True
         if app is None:
