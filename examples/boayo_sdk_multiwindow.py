@@ -31,6 +31,8 @@ def main():
             for event in sdk.poll_events():
                 if event.type == "pointer_button" and event.pressed:
                     print(f"SDK_CLICK {event.window_id} {event.x:.1f} {event.y:.1f}", flush=True)
+                elif event.type in ("focus", "resize"):
+                    print(f"SDK_{event.type.upper()} {event.window_id} {event.state}", flush=True)
             time.sleep(.05)
 
 

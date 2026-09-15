@@ -75,6 +75,61 @@ class BoayoUITests(unittest.TestCase):
             sdk.poll_events()  # Release also missed the window.
             self.assertIsNone(window.drag)
 
+    def test_sdk_reports_window_size_and_focus_without_resizing_rgb_surface(self):
+        wm = Mock()
+        wm.create_window.return_value = {"window_id": 26, "focused": True}
+        wm.get_state.return_value = {"pointer": {"buttons": []}}
+        with BoayoSDK("state-app", wm=wm) as sdk:
+            window = sdk.create_window("State", width_deg=38, height_deg=28,
+                                       width=400, height=300)
+            initial = sdk.window_state(window.window_id)
+            self.assertTrue(initial.focused)
+            self.assertEqual((initial.surface_width, initial.surface_height), (400, 300))
+            self.assertEqual((initial.content_width, initial.content_height),
+                             (window.frame.content.width, window.frame.content.height))
+            point = window.frame.controls()["resize_right"].mean(axis=0)
+            u, v = float(point[0]) / 400, float(point[1]) / 300
+            wm.poll_events.side_effect = [[
+                {"type": "focus", "window_id": 26, "focused": False},
+                {"type": "pointer_button", "window_id": 26, "button": "left",
+                 "pressed": True, "u": u, "v": v},
+                {"type": "pointer_motion", "window_id": 26, "u": u + .1, "v": v},
+            ], []]
+            events = sdk.poll_events()
+            self.assertEqual([event.type for event in events], ["focus", "resize"])
+            self.assertFalse(events[0].focused)
+            self.assertFalse(window.focused)
+            self.assertAlmostEqual(events[1].state.width_deg, 41.8)
+            self.assertEqual((events[1].state.surface_width, events[1].state.surface_height),
+                             (400, 300))
+            self.assertEqual(sdk.window_state(window).width_deg, events[1].state.width_deg)
+            self.assertEqual(sdk.poll_events(), [])  # No duplicate resize event.
+
+    def test_sdk_emits_resize_when_caption_drag_leaves_window(self):
+        wm = Mock()
+        wm.create_window.return_value = {"window_id": 27}
+        with BoayoSDK("off-window-resize", wm=wm) as sdk:
+            window = sdk.create_window("Resize", azimuth=10, elevation=-30)
+            point = window.frame.controls()["resize_right"].mean(axis=0)
+            u, v = float(point[0]) / window.frame.width, float(point[1]) / window.frame.height
+            start_az, start_el = window._gaze_at_surface(10, -30, 38, 28, u, v)
+            wm.poll_events.side_effect = [
+                [{"type": "pointer_button", "window_id": 27, "button": "left",
+                  "pressed": True, "u": u, "v": v}], [], [],
+            ]
+            wm.get_state.side_effect = [
+                {"pointer": {"azimuth": start_az, "elevation": start_el, "buttons": ["left"]}},
+                {"pointer": {"azimuth": start_az + 3, "elevation": start_el, "buttons": ["left"]}},
+                {"pointer": {"azimuth": start_az + 3, "elevation": start_el, "buttons": []}},
+            ]
+            self.assertEqual(sdk.poll_events(), [])
+            changed = sdk.poll_events()
+            self.assertEqual(len(changed), 1)
+            self.assertEqual(changed[0].type, "resize")
+            self.assertGreater(changed[0].state.width_deg, 38)
+            self.assertEqual(sdk.poll_events(), [])
+            self.assertIsNone(window.drag)
+
     def test_caption_gray_is_neutral_for_rgb332_palette(self):
         frame = BoayoAppFrame(400, 300, "Color")
         image = frame.render(lambda *_: None)

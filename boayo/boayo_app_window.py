@@ -25,6 +25,23 @@ class AppRect:
     height: int
 
 
+@dataclass(frozen=True)
+class BoayoWindowState:
+    """One app window's angular extent, fixed RGB surface and focus."""
+
+    window_id: int
+    azimuth: float
+    elevation: float
+    width_deg: float
+    height_deg: float
+    surface_width: int
+    surface_height: int
+    content_width: int
+    content_height: int
+    focused: bool
+    closed: bool
+
+
 class BoayoAppFrame:
     """Draw app content and a caption box that stays within the window width."""
 
@@ -96,10 +113,22 @@ class BoayoApplicationWindow:
         self.window_id = info["window_id"] if isinstance(info, dict) else int(info)
         self.azimuth, self.elevation = float(azimuth), float(elevation)
         self.width_deg, self.height_deg = float(width_deg), float(height_deg)
+        self.focused = bool(info.get("focused", True)) if isinstance(info, dict) else True
         self.drag = None
         self.last_drag_pose = None
         self.pressed_zone = None
         self.closed = False
+
+    @property
+    def state(self):
+        """Return a stable snapshot; angular resize does not resize RGB pixels."""
+        return BoayoWindowState(
+            self.window_id, self.azimuth, self.elevation,
+            self.width_deg, self.height_deg,
+            self.frame.width, self.frame.height,
+            self.frame.content.width, self.frame.content.height,
+            self.focused, self.closed,
+        )
 
     @staticmethod
     def _gaze_at_surface(azimuth, elevation, width_deg, height_deg, u, v):
@@ -186,6 +215,9 @@ class BoayoApplicationWindow:
         if event.get("window_id") != self.window_id or self.closed:
             return None
         kind = event.get("type")
+        if kind == "focus":
+            self.focused = bool(event.get("focused"))
+            return None
         if kind == "pointer_button" and event.get("button") == "left":
             zone = self.frame.hit_test(event.get("u", -1), event.get("v", -1))
             if event.get("pressed"):

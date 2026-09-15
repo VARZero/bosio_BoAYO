@@ -42,6 +42,29 @@ with BoayoSDK("my-app") as sdk:
 
 `create_window()`의 시선 좌표를 생략하면 런처가 전달한 위치가 쓰입니다. `window.present(draw)`의 `content`는 캡션을 제외한 앱 내용 영역의 픽셀 사각형입니다. 이벤트의 `x`, `y`는 그 내용 영역의 왼쪽 위를 `(0, 0)`으로 한 좌표입니다. 캡션 이벤트는 SDK가 직접 처리하며 내용 클릭 이벤트로 전달되지 않습니다. 정적 앱도 `poll_events()`를 호출해야 닫기·이동·크기 조절이 반응합니다.
 
+## 창 크기·변경·포커스
+
+`sdk.window_state(window)` 또는 `window.state`는 읽는 순간의 불변 `BoayoWindowState` 스냅샷입니다. 앱이 가진 여러 창을 창 ID로 구분할 때는 `sdk.window_state(window_id)`도 가능합니다. SDK 0.2.0부터 포커스 이벤트가 현재 상태를 업데이트하고, 캡션 드래그로 구면 각도 크기가 바뀌면 `resize` 이벤트를 반환합니다.
+
+```python
+state = sdk.window_state(window)
+print(state.width_deg, state.height_deg)            # 구면 창의 각도 크기(°)
+print(state.surface_width, state.surface_height)    # RGB24 표면 픽셀 크기
+print(state.content_width, state.content_height)    # 캡션을 뺀 내용 픽셀 크기
+print(state.focused)                                # 현재 포커스 여부
+
+for event in sdk.poll_events():
+    if event.window_id != window.window_id:
+        continue
+    if event.type == "resize":
+        print("new angular size", event.state.width_deg, event.state.height_deg)
+        window.present(draw)  # 각도에 맞춰 내용을 다시 그릴 필요가 있을 때
+    elif event.type == "focus":
+        print("focused", event.focused, event.state.focused)
+```
+
+`resize`는 한 `poll_events()` 호출에서 각 창의 최종 각도 크기가 이전 호출과 달라졌을 때 **창당 한 번** 발생합니다. BTN2나 마우스 캡션 드래그가 창 밖으로 나가도 전역 포인터를 따라 변경을 감지합니다. `state`에는 azimuth/elevation, `closed`도 포함됩니다. 구면 크기 변경은 프레임버퍼에서 창이 덮는 **각도**를 바꾸며, 앱의 RGB24 표면이나 내용 사각형의 **픽셀 수**를 자동으로 바꾸지는 않습니다. 따라서 다른 픽셀 해상도로 다시 렌더링하고 싶다면 앱 자체에서 소스 이미지 크기를 결정해야 합니다. 포커스 상태는 `sdk.poll_events()`가 들어온 이벤트를 처리한 뒤 갱신됩니다. SDK 밖에서 Bosio IPC로 직접 바꾼 창 기하 정보는 SDK 창 객체에 자동 동기화되지 않으므로, SDK가 관리하는 캡션 또는 창 API를 사용하세요.
+
 이미 렌더링한 RGB 이미지가 있다면 `window.present_rgb(image, fit="contain")`을 사용합니다. 입력은 `(높이, 너비, 3)` NumPy 배열입니다. `fit="stretch"`도 사용할 수 있습니다. SDK가 이미지를 내용 영역에 넣고 캡션을 덧그립니다.
 
 ## 앱 하나에서 창 여러 개 만들기

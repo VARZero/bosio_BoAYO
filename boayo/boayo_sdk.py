@@ -11,15 +11,15 @@ from dataclasses import dataclass
 
 try:
     from bosio_wm_client import BosioWMClient
-    from boayo_app_window import BoayoApplicationWindow
+    from boayo_app_window import BoayoApplicationWindow, BoayoWindowState
     from boayo_ui import ACCENT, INK, MUTED, PANEL, WHITE, BoayoSurface
 except ImportError:
     from .bosio_wm_client import BosioWMClient
-    from .boayo_app_window import BoayoApplicationWindow
+    from .boayo_app_window import BoayoApplicationWindow, BoayoWindowState
     from .boayo_ui import ACCENT, INK, MUTED, PANEL, WHITE, BoayoSurface
 
 
-SDK_VERSION = "0.1.0"
+SDK_VERSION = "0.2.0"
 
 
 @dataclass(frozen=True)
@@ -33,6 +33,7 @@ class BoayoEvent:
     pressed: bool | None = None
     button: str | None = None
     focused: bool | None = None
+    state: BoayoWindowState | None = None
 
 
 class BoayoSDK:
@@ -47,6 +48,7 @@ class BoayoSDK:
         self.socket_path = str(socket_path)
         self.wm = wm
         self.windows = {}
+        self._reported_sizes = {}
         self._owns_connection = wm is None
 
     def __enter__(self):
@@ -62,6 +64,7 @@ class BoayoSDK:
             self.wm.close()
         self.wm = None
         self.windows.clear()
+        self._reported_sizes.clear()
 
     def create_window(self, title, *, azimuth=None, elevation=None,
                       width_deg=38, height_deg=28, width=400, height=300,
@@ -77,7 +80,16 @@ class BoayoSDK:
             width=width, height=height, accent=accent,
         )
         self.windows[window.window_id] = window
+        self._reported_sizes[window.window_id] = (window.width_deg, window.height_deg)
         return window
+
+    def window_state(self, window):
+        """Read angular size, RGB pixel size, content pixel size and focus."""
+        wid = window.window_id if isinstance(window, BoayoApplicationWindow) else int(window)
+        owned = self.windows.get(wid)
+        if owned is None:
+            raise ValueError("window is not owned by this BoayoSDK instance")
+        return owned.state
 
     def destroy_window(self, window):
         """Close one window while other windows of this app remain running."""
@@ -86,6 +98,7 @@ class BoayoSDK:
         if owned is None:
             raise ValueError("window is not owned by this BoayoSDK instance")
         self.wm.destroy_window(wid)
+        self._reported_sizes.pop(wid, None)
         owned.closed = True
 
     def poll_events(self):
@@ -110,12 +123,14 @@ class BoayoSDK:
             window.handle_event(raw)
             if window.closed:
                 self.windows.pop(window.window_id, None)
+                self._reported_sizes.pop(window.window_id, None)
             if area == "content":
                 result.append(BoayoEvent(window.window_id, kind, x, y,
                                          raw.get("pressed") if kind == "pointer_button" else None,
                                          raw.get("button") if kind == "pointer_button" else None))
             elif kind == "focus":
-                result.append(BoayoEvent(window.window_id, kind, focused=bool(raw.get("focused"))))
+                result.append(BoayoEvent(window.window_id, kind,
+                                         focused=window.focused, state=window.state))
         # BOSIO routes ordinary pointer events to the current hit window. A
         # dragged caption can move out from under the pointer, so follow the
         # pointer's world pose and button state until release regardless of hit.
@@ -129,8 +144,15 @@ class BoayoSDK:
             else:
                 for window in dragging:
                     window.cancel_drag()
+        # One latest size snapshot per window per poll. Caption drags may be
+        # followed from the global pointer after hit events stop arriving.
+        for window in self.windows.values():
+            size = (window.width_deg, window.height_deg)
+            if size != self._reported_sizes.get(window.window_id):
+                result.append(BoayoEvent(window.window_id, "resize", state=window.state))
+                self._reported_sizes[window.window_id] = size
         return result
 
 
-__all__ = ["BoayoSDK", "BoayoEvent", "BoayoApplicationWindow", "BoayoSurface",
+__all__ = ["BoayoSDK", "BoayoEvent", "BoayoWindowState", "BoayoApplicationWindow", "BoayoSurface",
            "ACCENT", "INK", "MUTED", "PANEL", "WHITE", "SDK_VERSION"]
