@@ -23,8 +23,12 @@ def main():
             pitch = math.degrees(out.get("sensor_pitch_mrad", 0) / 1000.0)
             wm.configure_window(wid, azimuth=yaw, elevation=pitch)
             for event in wm.poll_button_events():
-                if event["button"] == 0 and event["pressed"]:
+                if event["pressed"] and event["button"] in (0, 1):
+                    # BTN0/BTN1 bring the single launcher panel to current gaze.
+                    wm.configure_window(wid, azimuth=yaw, elevation=pitch, mapped=True)
+                    wm.focus_window(wid, raise_window=True)
                     shell.selected_app = None
+                    print(f"BOAYO_PANEL_FOCUS BTN{event['button']} az={yaw:.2f} el={pitch:.2f}", flush=True)
                 elif event["button"] == 2 and event["pressed"]:
                     # Center gaze acts as a click on the launcher surface.
                     shell.pointer_motion(shell.width * .5, shell.height * .5)
