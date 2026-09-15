@@ -11,7 +11,8 @@ sys.path[:0] = [str(ROOT / "boayo"), str(ROOT / "vendor" / "bosio_SphericalWM" /
 from boayo_ui import PANEL, BoayoSurface
 from boayo_shell import BoayoScene, BoayoShell, BoayoLauncherShell, BoayoWorkspace
 from boayo_native_desktop import (BTN2AppDrag, click_launcher_at_gaze,
-                                  launcher_contains_gaze, launcher_point_at_gaze)
+                                  launcher_contains_gaze, launcher_contains_point,
+                                  launcher_point_at_gaze)
 from boayo_app_window import BoayoAppFrame, BoayoApplicationWindow
 from boayo_sdk import BoayoSDK
 from bosio_view_simulator import render_bosio_view
@@ -25,6 +26,9 @@ class BoayoUITests(unittest.TestCase):
         self.assertIsNotNone(launcher_point_at_gaze(shell, 0, 0, 19, 0))
         self.assertFalse(launcher_contains_gaze(shell, 0, 0, 80, 0))
         self.assertFalse(launcher_contains_gaze(shell, 0, 0, 180, 0))
+        rect = shell.window
+        self.assertFalse(launcher_contains_point(shell, rect.x + 1, rect.y + 1))
+        self.assertTrue(launcher_contains_point(shell, rect.x + 18, rect.y + 1))
         wm = Mock()
         with patch("boayo_shell.subprocess.Popen") as spawn:
             self.assertFalse(click_launcher_at_gaze(wm, shell, 3, 0, 0, 19, 0))

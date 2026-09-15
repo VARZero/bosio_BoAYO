@@ -26,8 +26,13 @@ def launcher_point_at_gaze(shell, panel_az, panel_el, yaw, pitch):
 def launcher_contains_point(shell, x, y):
     """The visible panel excludes the black margin of its BOSIO window."""
     rect = shell.window
-    return (rect.x <= x <= rect.x + rect.width and
-            rect.y <= y <= rect.y + rect.height)
+    if not (rect.x <= x <= rect.x + rect.width and
+            rect.y <= y <= rect.y + rect.height):
+        return False
+    radius = 18.0  # BoayoLauncherShell.render() draws this rounded rectangle.
+    dx = max(rect.x + radius - x, 0, x - (rect.x + rect.width - radius))
+    dy = max(rect.y + radius - y, 0, y - (rect.y + rect.height - radius))
+    return dx * dx + dy * dy <= radius * radius
 
 
 def launcher_contains_gaze(shell, panel_az, panel_el, yaw, pitch):
