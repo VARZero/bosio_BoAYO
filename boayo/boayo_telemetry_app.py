@@ -14,11 +14,9 @@ def main():
                                 width_deg=36, height_deg=26,
                                 surface_width=w, surface_height=h)
         wid = info["window_id"]
-        frame = np.zeros((h, w, 3), dtype=np.uint8)
-        frame[:] = (20, 28, 38)
-        frame[18:66, 18:w-18] = (51, 181, 122)
-        frame[88:94, 18:w-18] = (80, 100, 120)
-        frame[150:156, 18:w-18] = (51, 181, 122)
+        frame = np.full((h, w, 3), (248, 250, 253), dtype=np.uint8)
+        frame[62:138, 90:166] = (51, 181, 122)
+        frame[104:108, 188:300] = (51, 181, 122)
         t = 0
         while True:
             pulse = int((np.sin(t * 0.12) + 1.0) * 0.5 * (w - 36))
