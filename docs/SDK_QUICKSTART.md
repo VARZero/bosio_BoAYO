@@ -2,7 +2,7 @@
 
 `boayo_sdk.py`는 여러 Python 앱이 같은 BoAYo 창 규칙을 사용할 수 있는 공개 API입니다. 각 앱은 독립 프로세스로 실행됩니다. 한 앱은 SDK 연결 하나로 창을 여러 개 만들 수 있습니다. SDK가 Bosio IPC 연결, 앱 창 등록, 내용 아래 캡션, 캡션 클릭과 창별 이벤트 분배를 처리합니다. Bosio는 구면 위치·겹침·포커스·최종 출력을 처리합니다. BoAYo 런처 **패널에는 캡션이 없습니다.**
 
-함수별 인자·반환값, 이벤트 필드와 그리기 도구의 전체 목록은 [SDK API 참고서](SDK_API_REFERENCE.md)에 있습니다.
+함수별 인자와 반환값, 이벤트 필드, 그리기 도구 목록은 [SDK 함수·이벤트 안내](SDK_API_REFERENCE.md)에 있습니다.
 
 ## 실행 환경
 
@@ -46,7 +46,7 @@ with BoayoSDK("my-app") as sdk:
 
 ## 창 크기·변경·포커스
 
-`sdk.window_state(window)` 또는 `window.state`는 읽는 순간의 불변 `BoayoWindowState` 스냅샷입니다. 앱이 가진 여러 창을 창 ID로 구분할 때는 `sdk.window_state(window_id)`도 가능합니다. SDK 0.2.0부터 포커스 이벤트가 현재 상태를 업데이트하고, 캡션 드래그로 구면 각도 크기가 바뀌면 `resize` 이벤트를 반환합니다.
+`sdk.window_state(window)` 또는 `window.state`는 읽는 시점의 창 상태를 복사한 `BoayoWindowState`입니다. 앱이 만든 여러 창을 ID로 구분할 때는 `sdk.window_state(window_id)`도 사용할 수 있습니다. SDK 0.2.0부터 포커스 이벤트가 현재 상태를 갱신하고, 캡션으로 구면 각도 크기를 조절하면 `resize` 이벤트가 전달됩니다.
 
 ```python
 state = sdk.window_state(window)
@@ -65,7 +65,7 @@ for event in sdk.poll_events():
         print("focused", event.focused, event.state.focused)
 ```
 
-`resize`는 한 `poll_events()` 호출에서 각 창의 최종 각도 크기가 이전 호출과 달라졌을 때 **창당 한 번** 발생합니다. BTN2나 마우스 캡션 드래그가 창 밖으로 나가도 전역 포인터를 따라 변경을 감지합니다. `state`에는 azimuth/elevation, `closed`도 포함됩니다. 구면 크기 변경은 프레임버퍼에서 창이 덮는 **각도**를 바꾸며, 앱의 RGB24 표면이나 내용 사각형의 **픽셀 수**를 자동으로 바꾸지는 않습니다. 따라서 다른 픽셀 해상도로 다시 렌더링하고 싶다면 앱 자체에서 소스 이미지 크기를 결정해야 합니다. 포커스 상태는 `sdk.poll_events()`가 들어온 이벤트를 처리한 뒤 갱신됩니다. SDK 밖에서 Bosio IPC로 직접 바꾼 창 기하 정보는 SDK 창 객체에 자동 동기화되지 않으므로, SDK가 관리하는 캡션 또는 창 API를 사용하세요.
+`resize`는 창의 최종 각도 크기가 이전 `poll_events()` 호출 이후 달라졌을 때 **호출당 창별로 최대 한 번** 발생합니다. BTN2나 마우스로 캡션을 드래그하다 창 밖으로 나가도 변경을 감지합니다. `state`에는 창 중심 위치인 azimuth/elevation과 `closed`도 포함됩니다. 구면 크기 조절은 창이 덮는 **각도**를 바꾸지만, RGB24 이미지와 내용 영역의 **픽셀 크기**는 바꾸지 않습니다. 다른 해상도의 이미지를 만들려면 앱에서 소스 이미지 크기를 결정하세요. 포커스 상태는 `sdk.poll_events()`로 새 이벤트를 읽은 뒤 갱신됩니다. SDK를 거치지 않고 Bosio IPC에서 직접 바꾼 창 위치·크기는 SDK 창 객체에 자동 반영되지 않습니다.
 
 이미 렌더링한 RGB 이미지가 있다면 `window.present_rgb(image, fit="contain")`을 사용합니다. 입력은 `(높이, 너비, 3)` NumPy 배열입니다. `fit="stretch"`도 사용할 수 있습니다. SDK가 이미지를 내용 영역에 넣고 캡션을 덧그립니다.
 

@@ -1,10 +1,10 @@
-# BoAYo SDK API 참고서
+# BoAYo SDK 함수와 이벤트 안내
 
-이 문서는 `boayo_sdk.py` **0.2.0**의 공개 Python API를 설명합니다. 앱은 BoAYo SDK로 RGB24 창 내용과 아래 캡션을 함께 제출합니다. Bosio 창 관리자는 구면 위치·겹침·포커스·정이십면체 장면 합성을 맡습니다. 런처 **패널**은 앱 창과 다른 Bosio 창이며 캡션이 없습니다.
+이 문서는 BoAYo SDK **0.2.0**의 함수와 이벤트를 현재 코드 기준으로 설명합니다. 앱은 SDK로 창 이미지를 보내고, SDK는 이미지 아래에 캡션을 그립니다. Bosio 창 관리자는 구면 위치·창 겹침·포커스·정이십면체 프레임버퍼 합성을 맡습니다. 런처 **패널**은 앱 창과 다르며 캡션이 없습니다.
 
-처음 앱을 만들 때는 [SDK 빠른 시작](SDK_QUICKSTART.md)을 읽고, 함수·이벤트의 정확한 의미가 필요할 때 이 문서를 참고하세요. 실행 중 SDK를 계속 호출하려면 `/home/xilinx/bosio_v2/boayo`와 `/home/xilinx/bosio_v2`를 `PYTHONPATH`에 넣어야 합니다.
+처음 앱을 만들 때는 [SDK 빠른 시작](SDK_QUICKSTART.md)을 읽으세요. 각 함수의 인자와 이벤트 필드를 찾을 때 이 문서를 참고할 수 있습니다. 보드에서 직접 앱을 실행한다면 `/home/xilinx/bosio_v2/boayo`와 `/home/xilinx/bosio_v2`를 `PYTHONPATH`에 넣어야 합니다.
 
-## 연결과 창 생명주기
+## 연결하고 창 만들기·닫기
 
 ```python
 from boayo_sdk import BoayoSDK
@@ -21,10 +21,10 @@ with BoayoSDK("my-app") as sdk:
 |---|---|
 | `BoayoSDK(app_name, socket_path="/tmp/bosio-wm.sock", wm=None)` | 앱의 Bosio IPC 연결을 준비합니다. `app_name`은 소유 앱 이름입니다. `socket_path`는 데몬 소켓 주소입니다. `wm`은 이미 만든 Bosio 클라이언트를 주입하는 고급 용도입니다. |
 | `with sdk ...` / `sdk.__enter__()` | 소켓에 연결하고 SDK 자신을 반환합니다. 연결 전에 `create_window()`을 부르면 `RuntimeError`가 납니다. |
-| `sdk.close()` / `sdk.__exit__()` | SDK가 만든 연결을 닫고 로컬 창 목록을 비웁니다. 정상 IPC 연결이 닫히면 Bosio가 해당 앱 소유 창을 제거합니다. 주입된 `wm` 연결은 SDK가 닫지 않습니다. |
+| `sdk.close()` / `sdk.__exit__()` | SDK가 연 연결을 닫고 창 목록을 비웁니다. 정상적으로 연결이 종료되면 Bosio는 해당 앱이 만든 창을 제거합니다. 전달받은 `wm` 연결은 SDK가 닫지 않습니다. |
 | `sdk.create_window(...)` | Bosio 앱 창 한 개를 등록하고 `BoayoApplicationWindow` 객체를 반환합니다. 창 생성은 그 창에 포커스를 줍니다. |
-| `sdk.window_state(window)` | 앱 소유 창 객체 또는 `window_id`를 받아 불변 `BoayoWindowState` 스냅샷을 반환합니다. 소유하지 않거나 이미 SDK 목록에서 제거된 창이면 `ValueError`가 납니다. |
-| `sdk.destroy_window(window)` | 지정한 앱 소유 창 **하나만** 닫습니다. 다른 창과 앱 프로세스는 유지됩니다. `window.closed=True`가 됩니다. |
+| `sdk.window_state(window)` | 이 앱에서 만든 창 객체 또는 `window_id`를 받아 읽는 시점의 `BoayoWindowState`를 반환합니다. 다른 앱의 창이나 이미 닫힌 창이면 `ValueError`가 납니다. |
+| `sdk.destroy_window(window)` | 지정한 창 **하나만** 닫습니다. 다른 창과 앱 프로세스는 유지됩니다. `window.closed=True`가 됩니다. |
 | `sdk.poll_events()` | Bosio 입력을 한 번 읽고 캡션 동작·포커스·창별 크기 변경을 처리한 뒤 `list[BoayoEvent]`를 반환합니다. 정적 화면에서도 반복해서 호출해야 캡션이 반응합니다. |
 | `sdk.windows` | 현재 이 SDK 연결이 소유한 `{window_id: window}` 딕셔너리입니다. 캡션 닫기나 `destroy_window()` 뒤에 해당 창이 빠집니다. |
 
@@ -50,16 +50,16 @@ window = sdk.create_window(
 
 ## 창 객체와 그림 제출
 
-`create_window()`의 결과인 `BoayoApplicationWindow`에서 자주 쓰는 속성은 `window_id`, `closed`, `focused`, `azimuth`, `elevation`, `width_deg`, `height_deg`, `frame.content`, `state`입니다. `state`는 아래의 불변 스냅샷입니다. `frame.content`는 `AppRect(x, y, width, height)`로, 앱이 실제로 그리는 픽셀 사각형입니다. 이 좌표의 원점은 **전체 RGB 표면**의 왼쪽 위입니다.
+`create_window()`가 반환한 창 객체에서 자주 쓰는 속성은 `window_id`, `closed`, `focused`, `azimuth`, `elevation`, `width_deg`, `height_deg`, `frame.content`, `state`입니다. `state`는 읽는 시점의 상태를 복사한 값입니다. `frame.content`는 `AppRect(x, y, width, height)`이며 앱 내용 영역을 나타냅니다. 이 좌표의 원점은 **전체 RGB 이미지**의 왼쪽 위입니다.
 
 | 함수 | 역할 |
 |---|---|
 | `window.present(draw_content)` | `draw_content(canvas, content)` 콜백으로 내용을 그리고 아래 캡션을 더한 뒤 RGB24 표면 전체를 Bosio에 보냅니다. `canvas`는 `BoayoSurface`, `content`는 `AppRect`입니다. 호출할 때마다 내용이 다시 제출됩니다. |
 | `window.present_rgb(rgb, fit="contain")` | `(높이, 너비, 3)` RGB NumPy 배열을 내용 영역에 bilinear 크기 조절로 넣고 캡션을 더합니다. `contain`은 비율을 유지하고 `stretch`는 내용 영역에 늘립니다. 배열은 `uint8`로 변환됩니다. |
 | `window.state` | 현재 로컬 창 상태의 `BoayoWindowState` 스냅샷입니다. |
-| `window.poll_events()` | 저수준 단일 창 도우미입니다. **BoayoSDK 사용 앱에서는 호출하지 마세요.** SDK와 동일한 Bosio 이벤트 큐를 소비해 다른 창의 이벤트를 잃을 수 있습니다. |
+| `window.poll_events()` | SDK 내부에서 쓰는 단일 창 도우미입니다. **SDK를 사용하는 앱은 이 함수 대신 `sdk.poll_events()`를 호출하세요.** 두 함수를 섞으면 다른 창의 이벤트를 놓칠 수 있습니다. |
 
-`BoayoApplicationWindow(...)` 생성자를 직접 호출하는 저수준 경로도 있지만 일반 앱에서는 `sdk.create_window()`를 사용하세요. `window.handle_event(raw)`, `window.apply_gaze_drag(azimuth, elevation)`, `window.cancel_drag()`는 캡션 입력·창 밖 드래그를 SDK가 처리할 때 사용하는 저수준 함수입니다. 앱에서 직접 호출하면 SDK의 이벤트·크기 변경 조회 시점과 어긋날 수 있습니다.
+일반 앱에서는 `BoayoApplicationWindow(...)` 생성자를 직접 호출하지 않고 `sdk.create_window()`를 사용하세요. `window.handle_event(raw)`, `window.apply_gaze_drag(azimuth, elevation)`, `window.cancel_drag()`는 캡션 입력과 창 밖 드래그를 SDK가 처리할 때 사용하는 함수입니다. 앱에서 직접 호출하면 SDK가 반환하는 이벤트와 실제 창 상태가 어긋날 수 있습니다.
 
 `draw_content`는 매번 내용 영역 안에 그려야 합니다. SDK가 전체 표면을 지우고 앱 내용을 만든 뒤 캡션을 그립니다. 앱이 전달한 RGB 표면은 픽셀별 알파 투명도를 지원하지 않습니다.
 
@@ -90,7 +90,7 @@ window = sdk.create_window(
 
 `pointer_motion`/`pointer_button`의 `x`, `y`는 **캡션을 뺀 내용 영역 왼쪽 위가 (0, 0)**인 픽셀 좌표입니다. 부동소수점 값이고 오른쪽·아래쪽으로 증가합니다. `button`은 Bosio 입력 이름이며 왼쪽 클릭은 `"left"`입니다. `pressed`는 `pointer_button`에만 `True`/`False`이고 `pointer_motion`에서는 `None`입니다. 이 두 입력 이벤트의 `state`는 `None`입니다.
 
-`focus`의 `event.focused`는 변경된 포커스 여부이며 `event.state.focused`와 같습니다. `resize`의 `event.state`는 새 크기를 포함한 창 상태 스냅샷입니다. `resize` 이벤트 자체에는 별도 `x`, `y`나 픽셀 표면 크기 변경이 없습니다. 한 번의 `poll_events()` 호출에서 크기가 여러 차례 달라져도 **창당 최종 크기 한 번**을 반환합니다. 창 밖으로 캡션 드래그가 이어져도 전역 포인터 위치를 따라 크기 변경을 감지합니다.
+`focus`의 `event.focused`와 `event.state.focused`는 같습니다. `resize`의 `event.state`에는 조절된 각도 크기가 들어 있습니다. RGB 이미지의 픽셀 크기가 바뀌는 것은 아닙니다. 크기 조절 중 변화가 여러 번 있어도 `sdk.poll_events()`를 한 번 호출할 때 **창별로 최종 크기 한 번**만 반환합니다. 드래그가 창 밖으로 이어지면 현재 포인터 위치를 이용해 계속 계산합니다.
 
 캡션의 닫기·이동·크기 조절 클릭은 SDK가 소비하므로 앱 내용의 포인터 이벤트로 오지 않습니다. 닫기 완료를 별도의 `close` 이벤트로 보내지 않으며 `window.closed`와 `sdk.windows`로 확인합니다. 이동에는 현재 별도의 `move` 이벤트가 없고 `window.state.azimuth/elevation`을 읽습니다. 런처 **패널**의 입력은 앱 SDK 이벤트가 아닙니다.
 
@@ -143,7 +143,7 @@ with BoayoSDK("my-app") as sdk:
 - SDK 연결 전에 `create_window()`를 호출하거나 연결 종료 뒤 `poll_events()`를 호출하면 `RuntimeError`가 납니다.
 - 앱이 소유하지 않은 창을 `window_state()`/`destroy_window()`에 주면 `ValueError`가 납니다.
 - 표면이 240×170 픽셀보다 작으면 캡션 레이아웃이 `ValueError`를 냅니다. `present_rgb()` 입력은 3채널 RGB 배열과 `fit="contain"` 또는 `"stretch"`가 필요합니다.
-- Bosio IPC 연결이 끊기거나 서버가 오류를 반환하면 저수준 Bosio 클라이언트 오류가 올라옵니다. 보드에서는 `bosio-window-manager.service`와 `boayo-desktop.service` 상태를 먼저 확인하세요.
+- Bosio와의 연결이 끊기거나 서버가 오류를 반환하면 클라이언트 오류가 발생합니다. 보드에서는 `bosio-window-manager.service`와 `boayo-desktop.service` 상태를 먼저 확인하세요.
 - 구면 크기 조절은 앱 그림 표면의 픽셀 해상도를 자동으로 높이지 않습니다. RGB24에 픽셀별 알파 채널도 없습니다.
 
 전체 앱 예제: [`boayo_pulse_app.py`](../boayo/boayo_pulse_app.py), [`boayo_sdk_multiwindow.py`](../examples/boayo_sdk_multiwindow.py).
