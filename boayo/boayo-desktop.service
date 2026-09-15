@@ -10,7 +10,7 @@ Group=xilinx
 WorkingDirectory=/home/xilinx/bosio_v2/boayo
 Environment=PYTHONUNBUFFERED=1
 ExecStartPre=/usr/local/share/pynq-venv/bin/python3 /home/xilinx/bosio_v2/boayo/wait_for_bosio.py
-ExecStart=/usr/local/share/pynq-venv/bin/python3 -u /home/xilinx/bosio_v2/boayo/boayo_desktop.py --m 16 --fps 30 --launcher --apps /home/xilinx/bosio_v2/boayo/apps.json
+ExecStart=/usr/local/share/pynq-venv/bin/python3 -u /home/xilinx/bosio_v2/boayo/boayo_native_desktop.py --launcher --apps /home/xilinx/bosio_v2/boayo/apps.json
 Restart=always
 RestartSec=3
 TimeoutStopSec=10

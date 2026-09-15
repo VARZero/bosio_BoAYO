@@ -1,0 +1,37 @@
+#!/usr/bin/env python3
+"""BoAYO desktop backed entirely by BOSIO Window Manager windows."""
+from __future__ import annotations
+import math, time, sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from bosio_wm_client import BosioWMClient
+from boayo_shell import BoayoLauncherShell
+
+def main():
+    shell = BoayoLauncherShell(640, 360, "/home/xilinx/bosio_v2/boayo/apps.json")
+    with BosioWMClient("boayo-desktop") as wm:
+        win = wm.create_window("BoAYO Launcher", azimuth=0, elevation=0,
+                               width_deg=42, height_deg=30,
+                               surface_width=640, surface_height=360)
+        wid = win["window_id"]
+        last = 0.0
+        while True:
+            now = time.monotonic()
+            state = wm.get_state()
+            out = state.get("output") or {}
+            yaw = math.degrees(out.get("sensor_yaw_mrad", 0) / 1000.0)
+            pitch = math.degrees(out.get("sensor_pitch_mrad", 0) / 1000.0)
+            wm.configure_window(wid, azimuth=yaw, elevation=pitch)
+            for event in wm.poll_button_events():
+                if event["button"] == 0 and event["pressed"]:
+                    shell.selected_app = None
+                elif event["button"] == 2 and event["pressed"]:
+                    # Center gaze acts as a click on the launcher surface.
+                    shell.pointer_motion(shell.width * .5, shell.height * .5)
+                    shell.pointer_button(True); shell.pointer_button(False)
+            shell.tick(now - last); last = now
+            wm.update_surface(wid, shell.render())
+            time.sleep(1.0 / 30.0)
+
+if __name__ == "__main__":
+    main()
