@@ -353,10 +353,10 @@ class BoayoLauncherShell(BoayoShell):
         vx, vy, vw, vh = x + 24, y + 66, split - x - 44, 68
         canvas.rounded_rect(vx, vy, vw, vh, 16, (216, 224, 233))
         canvas.rounded_rect(vx, vy, int(vw * 0.64), vh, 16, ACCENT)
-        canvas.text(">))", vx + 15, vy + 26, WHITE, scale=2, bold=True)
+        canvas.text(">))", vx + 15, vy + 23, WHITE, scale=3, bold=True)
         # Re-center action remains available without a caption bar.
         canvas.rounded_rect(x + 24, y + height - 62, split - x - 44, 34, 8, WHITE)
-        canvas.text("CENTER", x + 38, y + height - 52, (45, 93, 161), scale=2)
+        canvas.text("CENTER", x + 30, y + height - 55, INK, scale=3, bold=True)
         list_x, list_y = split + 20, y + 22
         row_h = 54
         visible = max(1, min(5, int((height - 38) / row_h)))
@@ -371,10 +371,10 @@ class BoayoLauncherShell(BoayoShell):
                 canvas.rounded_rect(bx, by, x + width - bx - 18, row_h - 5, 9, (228, 239, 255))
             color = tuple(int(app.get("color", "#347CFF").lstrip("#")[i:i + 2], 16) for i in (0, 2, 4)) if isinstance(app.get("color"), str) and len(app.get("color", "").lstrip("#")) == 6 else ACCENT
             canvas.rounded_rect(bx + 8, by + 5, 38, 38, 11, color)
-            label = str(app.get("name", app.get("id", "APP")))[:14]
-            canvas.text(label, bx + 56, by + 18, INK if not selected else ACCENT, scale=2)
+            label = str(app.get("name", app.get("id", "APP")))[:9]
+            canvas.text(label, bx + 56, by + 10, INK, scale=4, bold=True)
         if len(self.apps) > visible:
-            canvas.text("WHEEL", list_x + 8, y + height - 24, MUTED, scale=1)
+            canvas.text("WHEEL", list_x + 8, y + height - 27, MUTED, scale=2, bold=True)
         self._draw_cursor(canvas)
         self._cached_render_key = key
         return canvas.image()
