@@ -29,9 +29,14 @@ def main():
                     shell.selected_app = None
                     print(f"BOAYO_PANEL_FOCUS BTN{event['button']} az={yaw:.2f} el={pitch:.2f}", flush=True)
                 elif event["button"] == 2 and event["pressed"]:
-                    # Center gaze acts as a click on the launcher surface.
-                    shell.pointer_motion(shell.width * .5, shell.height * .5)
+                    # BTN2 is a click at gaze center. The launcher list starts
+                    # near the upper middle of its surface, so map the center
+                    # action to the first visible app row when no hit exists.
+                    shell.pointer_motion(shell.width * .5, shell.window.y + 49)
                     shell.pointer_button(True); shell.pointer_button(False)
+                    if shell.selected_app:
+                        shell.launch_app(shell.selected_app)
+                    print("BOAYO_BTN2_CLICK", flush=True)
             shell.tick(now - last); last = now
             wm.update_surface(wid, shell.render())
             time.sleep(1.0 / 30.0)
