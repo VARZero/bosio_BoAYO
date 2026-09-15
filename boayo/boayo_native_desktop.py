@@ -33,6 +33,8 @@ def main():
                     shell.active_app = None
                     print(f"BOAYO_PANEL_FOCUS BTN{event['button']} az={yaw:.2f} el={pitch:.2f}", flush=True)
                 elif event["button"] == 2 and event["pressed"]:
+                    # Pass the launch gaze to the selected external app.
+                    shell.launch_pose = (yaw, pitch)
                     # Project current gaze onto the launcher surface and click.
                     direction = _direction(yaw, pitch)
                     center, right, up = _basis(panel_az, panel_el)
