@@ -21,7 +21,6 @@ def main():
             out = state.get("output") or {}
             yaw = math.degrees(out.get("sensor_yaw_mrad", 0) / 1000.0)
             pitch = math.degrees(out.get("sensor_pitch_mrad", 0) / 1000.0)
-            wm.configure_window(wid, azimuth=yaw, elevation=pitch)
             for event in wm.poll_button_events():
                 if event["pressed"] and event["button"] in (0, 1):
                     # BTN0/BTN1 bring the single launcher panel to current gaze.
