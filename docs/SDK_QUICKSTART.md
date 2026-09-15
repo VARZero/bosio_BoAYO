@@ -2,6 +2,8 @@
 
 `boayo_sdk.py`는 여러 Python 앱이 같은 BoAYo 창 규칙을 사용할 수 있는 공개 API입니다. 각 앱은 독립 프로세스로 실행됩니다. 한 앱은 SDK 연결 하나로 창을 여러 개 만들 수 있습니다. SDK가 Bosio IPC 연결, 앱 창 등록, 내용 아래 캡션, 캡션 클릭과 창별 이벤트 분배를 처리합니다. Bosio는 구면 위치·겹침·포커스·최종 출력을 처리합니다. BoAYo 런처 **패널에는 캡션이 없습니다.**
 
+함수별 인자·반환값, 이벤트 필드와 그리기 도구의 전체 목록은 [SDK API 참고서](SDK_API_REFERENCE.md)에 있습니다.
+
 ## 실행 환경
 
 PYNQ-Z2에서 BoAYo를 배포하면 SDK와 Bosio 클라이언트가 `/home/xilinx/bosio_v2/boayo`에 있습니다. 런처의 `apps.json`에서 실행된 앱에는 필요한 `PYTHONPATH`와 실행 시선의 `BOAYO_APP_AZIMUTH`, `BOAYO_APP_ELEVATION`이 자동 전달됩니다. 런처 밖에서 직접 실행할 때는 다음처럼 경로를 설정합니다.

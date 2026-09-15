@@ -79,6 +79,7 @@ Bosio 스택은 구면 창의 위치, 포커스, 겹침과 HDMI 투영을 맡습
 
 여러 앱에서 사용할 공개 Python API는 `boayo_sdk.py`의 `BoayoSDK`입니다. 앱은 SDK로 창을 만들고 내용만 그립니다. SDK는 캡션과 Bosio 이벤트 분배를 담당합니다. [SDK 빠른 시작](docs/SDK_QUICKSTART.md)에 앱 코드와 이미지 전달, 여러 창 사용 예제가 있습니다.
 SDK 0.2.0부터 `sdk.window_state(window)`로 각도 크기·그림 표면 픽셀 크기·포커스를 읽고, `sdk.poll_events()`의 `resize`/`focus` 이벤트로 변경에 반응할 수 있습니다. 각도 크기를 바꿔도 RGB 그림 표면의 픽셀 수는 그대로입니다.
+함수·인자·이벤트 필드와 UI 그리기 함수의 전체 계약은 [SDK API 참고서](docs/SDK_API_REFERENCE.md)에 정리했습니다.
 
 ## 검증
 
