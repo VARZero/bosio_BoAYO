@@ -217,6 +217,7 @@ class BoayoLauncherShell(BoayoShell):
         self.selected_app = None
         self.active_app = None
         self.last_launch = None
+        self.launch_pose = (0.0, 0.0)
         self.scroll_offset = 0
 
     def caption_polygons(self):
@@ -226,7 +227,18 @@ class BoayoLauncherShell(BoayoShell):
         try:
             with open(self.apps_path, "r", encoding="utf-8") as stream:
                 data = json.load(stream)
-            return [app for app in data.get("apps", []) if app.get("enabled", True)]
+            apps = []
+            for app in data.get("apps", []):
+                if not app.get("enabled", True):
+                    continue
+                command = app.get("command")
+                if not command:
+                    continue
+                argv = self._command_argv(command)
+                target = argv[1] if argv and argv[0].endswith(("python", "python3")) and len(argv) > 1 else (argv[0] if argv else "")
+                if target and (not os.path.isabs(target) or os.path.isfile(target)):
+                    apps.append(app)
+            return apps
         except (OSError, ValueError, TypeError):
             return []
 
@@ -265,7 +277,10 @@ class BoayoLauncherShell(BoayoShell):
             target = argv[1] if argv and argv[0].endswith(("python", "python3")) and len(argv) > 1 else (argv[0] if argv else "")
             if argv and (not os.path.isabs(target) or os.path.isfile(target)):
                 try:
-                    subprocess.Popen(argv, start_new_session=True)
+                    env = os.environ.copy()
+                    env["BOAYO_APP_AZIMUTH"] = str(self.launch_pose[0])
+                    env["BOAYO_APP_ELEVATION"] = str(self.launch_pose[1])
+                    subprocess.Popen(argv, start_new_session=True, env=env)
                     self.active_app = app
                     return True
                 except (OSError, ValueError):
@@ -534,7 +549,10 @@ class BoayoWorkspace:
 
     def pointer_button(self, pressed):
         if self.focused is not None:
-            return self.items[self.focused][0].pointer_button(pressed)
+            shell = self.items[self.focused][0]
+            if isinstance(shell, BoayoLauncherShell):
+                shell.launch_pose = self.mouse_pose
+            return shell.pointer_button(pressed)
         return None
 
     def scroll(self, delta):
