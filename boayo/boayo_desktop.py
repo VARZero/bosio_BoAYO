@@ -176,6 +176,7 @@ def run_daemon(args):
                         pressed = event["pressed"]
                         if pressed and isinstance(ui, BoayoWorkspace):
                             ui.add_panel(yaw, pitch)
+                            print(f"BOAYO_BTN0_PANEL az={yaw:.2f} el={pitch:.2f}", flush=True)
                         elif not isinstance(ui, BoayoWorkspace):
                             ui.pointer_button(pressed)
                     elif event["button"] == 2 and event["pressed"]:
