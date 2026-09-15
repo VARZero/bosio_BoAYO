@@ -9,24 +9,50 @@ from boayo_shell import BoayoLauncherShell
 from bosio_window_manager import _direction, _basis
 
 
-def click_launcher_at_gaze(wm, shell, wid, panel_az, panel_el, yaw, pitch):
-    """Run the pointed JSON app and remove the launcher without a splash."""
-    shell.launch_pose = (panel_az, panel_el)
+def launcher_point_at_gaze(shell, panel_az, panel_el, yaw, pitch):
+    """Return launcher surface pixels, or None outside its BOSIO allocation."""
     direction = _direction(yaw, pitch)
     center, right, up = _basis(panel_az, panel_el)
     dot = float(direction @ center)
     if dot <= 0:
-        return False
+        return None
     x = float(direction @ right) / dot / math.tan(math.radians(21.0))
     y = float(direction @ up) / dot / math.tan(math.radians(15.0))
     if abs(x) > 1 or abs(y) > 1:
+        return None
+    return (x + 1) * .5 * shell.width, (1 - y) * .5 * shell.height
+
+
+def launcher_contains_point(shell, x, y):
+    """The visible panel excludes the black margin of its BOSIO window."""
+    rect = shell.window
+    return (rect.x <= x <= rect.x + rect.width and
+            rect.y <= y <= rect.y + rect.height)
+
+
+def launcher_contains_gaze(shell, panel_az, panel_el, yaw, pitch):
+    point = launcher_point_at_gaze(shell, panel_az, panel_el, yaw, pitch)
+    return point is not None and launcher_contains_point(shell, *point)
+
+
+def hide_launcher(wm, shell, wid, reason):
+    wm.configure_window(wid, mapped=False)
+    shell.visible = False
+    print(f"BOAYO_PANEL_HIDDEN {reason}", flush=True)
+
+
+def click_launcher_at_gaze(wm, shell, wid, panel_az, panel_el, yaw, pitch):
+    """Run the pointed JSON app and remove the launcher without a splash."""
+    point = launcher_point_at_gaze(shell, panel_az, panel_el, yaw, pitch)
+    if point is None or not launcher_contains_point(shell, *point):
         return False
-    shell.pointer_motion((x + 1) * .5 * shell.width, (1 - y) * .5 * shell.height)
+    shell.launch_pose = (panel_az, panel_el)
+    shell.pointer_motion(*point)
     shell.pointer_button(True)
     shell.pointer_button(False)
     if shell.active_app is None:
         return False
-    wm.configure_window(wid, mapped=False)
+    hide_launcher(wm, shell, wid, "app-started")
     return True
 
 
@@ -78,16 +104,54 @@ def main():
         last_surface_key = None
         panel_mapped = True
         app_drag = BTN2AppDrag(wm)
+        last_left_press_serial = (wm.get_state().get("pointer") or {}).get("left_press_serial")
+        last_mouse_left = False
         while True:
             now = time.monotonic()
             if hide_panel_requested[0]:
                 hide_panel_requested[0] = False
                 app_drag.release(panel_az, panel_el)
-                wm.configure_window(wid, mapped=False)
+                hide_launcher(wm, shell, wid, "external-app")
                 panel_mapped = False
-                shell.visible = False
-                print("BOAYO_PANEL_HIDDEN external-app", flush=True)
             state = wm.get_state()
+            pointer = state.get("pointer") or {}
+            mouse_left = "left" in pointer.get("buttons", ())
+            press_serial = pointer.get("left_press_serial")
+            if press_serial is not None:
+                if press_serial != last_left_press_serial and panel_mapped:
+                    press = pointer.get("last_left_press") or {}
+                    if not launcher_contains_gaze(shell, panel_az, panel_el,
+                                                  press.get("azimuth", 0), press.get("elevation", 0)):
+                        hide_launcher(wm, shell, wid, "outside-click")
+                        panel_mapped = False
+                last_left_press_serial = press_serial
+            elif panel_mapped and mouse_left and not last_mouse_left:
+                # Older BOSIO services expose only the current button state.
+                if not launcher_contains_gaze(shell, panel_az, panel_el,
+                                              pointer.get("azimuth", 0), pointer.get("elevation", 0)):
+                    hide_launcher(wm, shell, wid, "outside-click")
+                    panel_mapped = False
+            last_mouse_left = mouse_left
+            for event in wm.poll_events():
+                if not panel_mapped or event.get("window_id") != wid:
+                    continue
+                if event.get("type") not in ("pointer_motion", "pointer_button"):
+                    continue
+                x = float(event["u"]) * shell.width
+                y = float(event["v"]) * shell.height
+                if (event["type"] == "pointer_button" and event.get("button") == "left" and
+                        event.get("pressed") and not launcher_contains_point(shell, x, y)):
+                    hide_launcher(wm, shell, wid, "outside-click")
+                    panel_mapped = False
+                    continue
+                shell.pointer_motion(x, y)
+                if event["type"] == "pointer_button" and event.get("button") == "left":
+                    shell.launch_pose = (panel_az, panel_el)
+                    shell.pointer_button(event["pressed"])
+                    if shell.active_app is not None:
+                        hide_launcher(wm, shell, wid, "app-started")
+                        panel_mapped = False
+                        print(f"BOAYO_APP_STARTED {shell.last_launch}", flush=True)
             out = state.get("output") or {}
             yaw = math.degrees(out.get("sensor_yaw_mrad", 0) / 1000.0)
             pitch = math.degrees(out.get("sensor_pitch_mrad", 0) / 1000.0)
@@ -104,15 +168,19 @@ def main():
                     shell.active_app = None
                     print(f"BOAYO_PANEL_FOCUS BTN{event['button']} az={yaw:.2f} el={pitch:.2f}", flush=True)
                 elif event["button"] == 2:
-                    if panel_mapped and event["pressed"]:
-                        if click_launcher_at_gaze(wm, shell, wid, panel_az, panel_el, yaw, pitch):
+                    if event["pressed"]:
+                        if panel_mapped and not launcher_contains_gaze(shell, panel_az, panel_el, yaw, pitch):
+                            hide_launcher(wm, shell, wid, "outside-click")
                             panel_mapped = False
-                            print(f"BOAYO_APP_STARTED {shell.last_launch}", flush=True)
-                    elif not panel_mapped:
-                        if event["pressed"]:
                             app_drag.press(yaw, pitch)
+                        elif panel_mapped:
+                            if click_launcher_at_gaze(wm, shell, wid, panel_az, panel_el, yaw, pitch):
+                                panel_mapped = False
+                                print(f"BOAYO_APP_STARTED {shell.last_launch}", flush=True)
                         else:
-                            app_drag.release(yaw, pitch)
+                            app_drag.press(yaw, pitch)
+                    else:
+                        app_drag.release(yaw, pitch)
             app_drag.move(yaw, pitch)
             shell.tick(now - last); last = now
             surface_key = shell.render_key()

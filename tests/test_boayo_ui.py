@@ -10,13 +10,27 @@ sys.path[:0] = [str(ROOT / "boayo"), str(ROOT / "vendor" / "bosio_SphericalWM" /
 
 from boayo_ui import PANEL, BoayoSurface
 from boayo_shell import BoayoScene, BoayoShell, BoayoLauncherShell, BoayoWorkspace
-from boayo_native_desktop import BTN2AppDrag, click_launcher_at_gaze
+from boayo_native_desktop import (BTN2AppDrag, click_launcher_at_gaze,
+                                  launcher_contains_gaze, launcher_point_at_gaze)
 from boayo_app_window import BoayoAppFrame, BoayoApplicationWindow
 from boayo_sdk import BoayoSDK
 from bosio_view_simulator import render_bosio_view
 
 
 class BoayoUITests(unittest.TestCase):
+    def test_launcher_outside_includes_black_margin_and_rest_of_sphere(self):
+        shell = BoayoLauncherShell()
+        self.assertTrue(launcher_contains_gaze(shell, 0, 0, 0, 0))
+        self.assertFalse(launcher_contains_gaze(shell, 0, 0, 19, 0))
+        self.assertIsNotNone(launcher_point_at_gaze(shell, 0, 0, 19, 0))
+        self.assertFalse(launcher_contains_gaze(shell, 0, 0, 80, 0))
+        self.assertFalse(launcher_contains_gaze(shell, 0, 0, 180, 0))
+        wm = Mock()
+        with patch("boayo_shell.subprocess.Popen") as spawn:
+            self.assertFalse(click_launcher_at_gaze(wm, shell, 3, 0, 0, 19, 0))
+        spawn.assert_not_called()
+        wm.configure_window.assert_not_called()
+
     def test_btn2_app_drag_keeps_press_until_release(self):
         wm = Mock()
         drag = BTN2AppDrag(wm)
