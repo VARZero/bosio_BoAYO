@@ -62,6 +62,6 @@ with BoayoSDK("multi-view") as sdk:
 
 SDK는 한 번에 Bosio 이벤트 큐를 읽고 창 ID별로 분배합니다. 앱 코드에서 각 창의 `poll_events()`를 따로 호출하면 다른 창의 이벤트까지 소비할 수 있으므로 위처럼 `sdk.poll_events()`를 사용합니다. 앱에서 직접 한 창을 닫으려면 `sdk.destroy_window(window)`을 호출하면 됩니다. 다른 창과 프로세스는 유지됩니다.
 
-실제 예제는 [`boayo_example_app.py`](../boayo/boayo_example_app.py)와 [`boayo_telemetry_app.py`](../boayo/boayo_telemetry_app.py)에 있습니다. `apps.json`에는 실행 가능한 앱의 절대 경로를 `command`로 등록합니다.
+실제 예제는 [`boayo_example_app.py`](../boayo/boayo_example_app.py), [`boayo_telemetry_app.py`](../boayo/boayo_telemetry_app.py), [`boayo_pulse_app.py`](../boayo/boayo_pulse_app.py)에 있습니다. SDK Pulse 앱은 내용의 막대를 1초마다 갱신하고, 내용 클릭 횟수를 표시합니다. 런처 목록에서 실행하거나 보드의 현재 시선에서 직접 실행하려면 `BOAYO_PYNQ_PASSWORD`를 설정하고 `python boayo/deploy_boayo.py run-pulse`를 실행합니다. 직접 실행된 앱은 `boayo-sdk-pulse.service`로 유지됩니다. 이 직접 실행 명령은 앱을 시작한 뒤 런처 패널을 접으며, BTN0/BTN1을 누르면 패널을 다시 열 수 있습니다. `apps.json`에는 실행 가능한 앱의 절대 경로를 `command`로 등록합니다.
 
 SDK를 BoAYo 폴더 밖의 앱에서 가져와 창 두 개를 만드는 실행 예제는 [`boayo_sdk_multiwindow.py`](../examples/boayo_sdk_multiwindow.py)에 있습니다.

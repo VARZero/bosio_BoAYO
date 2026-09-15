@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import argparse
+import json
+import math
 import os
 import posixpath
 from pathlib import Path
@@ -18,7 +20,7 @@ REMOTE_ROOT = "/home/xilinx/bosio_v2"
 REMOTE_APP = posixpath.join(REMOTE_ROOT, "boayo")
 BITSTREAM = posixpath.join(REMOTE_ROOT, "bitstream/bosio_output_disp.bit")
 PYTHON = "/usr/local/share/pynq-venv/bin/python3"
-FILES = ("boayo_ui.py", "boayo_shell.py", "boayo_app_window.py", "boayo_sdk.py", "boayo_desktop.py", "boayo_native_desktop.py", "boayo_example_app.py", "boayo_telemetry_app.py", "bosio_view_simulator.py", "wait_for_bosio.py", "apps.json", "boayo-desktop.service")
+FILES = ("boayo_ui.py", "boayo_shell.py", "boayo_app_window.py", "boayo_sdk.py", "boayo_desktop.py", "boayo_native_desktop.py", "boayo_example_app.py", "boayo_telemetry_app.py", "boayo_pulse_app.py", "bosio_view_simulator.py", "wait_for_bosio.py", "apps.json", "boayo-desktop.service")
 PY_FILES = tuple(name for name in FILES if name.endswith(".py"))
 
 
@@ -71,7 +73,7 @@ def deploy(ssh):
         for name in FILES:
             temporary = f"/tmp/{name}.upload"
             sftp.put(str(source / name), temporary)
-            mode = "0755" if name in ("boayo_example_app.py", "boayo_telemetry_app.py") else "0644"
+            mode = "0755" if name in ("boayo_example_app.py", "boayo_telemetry_app.py", "boayo_pulse_app.py") else "0644"
             command(ssh, f"install -m {mode} {temporary} {REMOTE_APP}/{name} && rm -f {temporary}")
     finally:
         sftp.close()
@@ -98,9 +100,46 @@ def start(ssh):
     print(output)
 
 
+def run_pulse(ssh):
+    """Launch the SDK demo at the board's current sensor gaze."""
+    _, output, _ = command(
+        ssh,
+        f"cd {REMOTE_ROOT} && {PYTHON} -c 'import json; from bosio_wm_client import BosioWMClient; "
+        "c=BosioWMClient(\"pulse-launch\"); print(json.dumps(c.get_state()[\"output\"])); c.close()'",
+    )
+    sensor = json.loads(output)
+    azimuth = math.degrees(sensor["sensor_yaw_mrad"] / 1000.0)
+    elevation = math.degrees(sensor["sensor_pitch_mrad"] / 1000.0)
+    command(ssh, "sudo -n systemctl stop boayo-sdk-pulse.service || true", check=False)
+    command(ssh, "sudo -n systemctl reset-failed boayo-sdk-pulse.service || true", check=False)
+    _, output, _ = command(
+        ssh,
+        "sudo -n systemd-run --unit=boayo-sdk-pulse --uid=xilinx --gid=xilinx "
+        f"--working-directory={REMOTE_APP} "
+        f"--setenv=PYTHONPATH={REMOTE_APP}:{REMOTE_ROOT} "
+        f"--setenv=BOAYO_APP_AZIMUTH={azimuth:.3f} "
+        f"--setenv=BOAYO_APP_ELEVATION={elevation:.3f} "
+        f"{PYTHON} -u {REMOTE_APP}/boayo_pulse_app.py",
+    )
+    command(ssh, "sudo -n systemctl kill --signal=SIGUSR1 --kill-who=main boayo-desktop.service")
+    print(f"SDK PULSE azimuth={azimuth:.2f} elevation={elevation:.2f}: {output}")
+
+
+def pulse_status(ssh):
+    _, output, _ = command(
+        ssh,
+        f"cd {REMOTE_ROOT} && {PYTHON} -c 'import json; from bosio_wm_client import BosioWMClient; "
+        "c=BosioWMClient(\"pulse-status\"); s=c.get_state(); "
+        "print(json.dumps({\"generation\":s[\"generation\"],\"windows\":s[\"windows\"],\"output\":s[\"output\"]})); c.close()'",
+    )
+    state = json.loads(output)
+    _, service, _ = command(ssh, "systemctl is-active boayo-sdk-pulse.service", check=False)
+    print(json.dumps({"service": service, **state}, ensure_ascii=False))
+
+
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("action", choices=("inspect", "status", "deploy", "start", "deploy-start", "reboot"))
+    parser.add_argument("action", choices=("inspect", "status", "deploy", "start", "deploy-start", "run-pulse", "pulse-status", "reboot"))
     args = parser.parse_args()
     ssh = connect()
     try:
@@ -108,6 +147,10 @@ def main():
             inspect(ssh)
         elif args.action == "status":
             status(ssh)
+        elif args.action == "run-pulse":
+            run_pulse(ssh)
+        elif args.action == "pulse-status":
+            pulse_status(ssh)
         elif args.action == "reboot":
             command(ssh, "sudo -n reboot", check=False)
         else:

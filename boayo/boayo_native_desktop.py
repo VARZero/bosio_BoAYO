@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """BoAYO desktop backed entirely by BOSIO Window Manager windows."""
 from __future__ import annotations
-import math, time, sys
+import math, signal, time, sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from bosio_wm_client import BosioWMClient
@@ -62,6 +62,12 @@ class BTN2AppDrag:
 
 def main():
     shell = BoayoLauncherShell(640, 360, "/home/xilinx/bosio_v2/boayo/apps.json")
+    hide_panel_requested = [False]
+
+    def request_panel_hide(_signal, _frame):
+        hide_panel_requested[0] = True
+
+    signal.signal(signal.SIGUSR1, request_panel_hide)
     with BosioWMClient("boayo-desktop") as wm:
         win = wm.create_window("BoAYO Launcher", azimuth=0, elevation=0,
                                width_deg=42, height_deg=30,
@@ -74,6 +80,13 @@ def main():
         app_drag = BTN2AppDrag(wm)
         while True:
             now = time.monotonic()
+            if hide_panel_requested[0]:
+                hide_panel_requested[0] = False
+                app_drag.release(panel_az, panel_el)
+                wm.configure_window(wid, mapped=False)
+                panel_mapped = False
+                shell.visible = False
+                print("BOAYO_PANEL_HIDDEN external-app", flush=True)
             state = wm.get_state()
             out = state.get("output") or {}
             yaw = math.degrees(out.get("sensor_yaw_mrad", 0) / 1000.0)

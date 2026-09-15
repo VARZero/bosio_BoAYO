@@ -39,6 +39,15 @@
       "order": 4
     },
     {
+      "id": "sdk-pulse",
+      "name": "SDK Pulse",
+      "icon": "telemetry",
+      "color": "#347CFF",
+      "command": "/home/xilinx/bosio_v2/boayo/boayo_pulse_app.py",
+      "enabled": true,
+      "order": 4
+    },
+    {
       "id": "messages",
       "name": "Messages",
       "icon": "messages",
