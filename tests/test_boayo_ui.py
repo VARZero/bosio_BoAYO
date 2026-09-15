@@ -1,6 +1,6 @@
 import unittest
 import sys
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, call, patch
 from pathlib import Path
 
 import numpy as np
@@ -10,13 +10,64 @@ sys.path[:0] = [str(ROOT / "boayo"), str(ROOT / "vendor" / "bosio_SphericalWM" /
 
 from boayo_ui import PANEL, BoayoSurface
 from boayo_shell import BoayoScene, BoayoShell, BoayoLauncherShell, BoayoWorkspace
-from boayo_native_desktop import click_launcher_at_gaze
+from boayo_native_desktop import BTN2AppDrag, click_launcher_at_gaze
 from boayo_app_window import BoayoAppFrame, BoayoApplicationWindow
 from boayo_sdk import BoayoSDK
 from bosio_view_simulator import render_bosio_view
 
 
 class BoayoUITests(unittest.TestCase):
+    def test_btn2_app_drag_keeps_press_until_release(self):
+        wm = Mock()
+        drag = BTN2AppDrag(wm)
+        drag.press(10, -30)
+        drag.move(12, -31)
+        self.assertTrue(drag.held)
+        self.assertEqual(wm.pointer_button.call_args_list, [call(True)])
+        drag.release(12, -31)
+        self.assertFalse(drag.held)
+        self.assertEqual(wm.pointer_warp.call_args_list,
+                         [call(10, -30), call(12, -31)])
+        self.assertEqual(wm.pointer_button.call_args_list,
+                         [call(True), call(False)])
+
+    def test_sdk_drag_continues_after_pointer_leaves_window(self):
+        wm = Mock()
+        wm.create_window.return_value = {"window_id": 25}
+        with BoayoSDK("drag-app", wm=wm) as sdk:
+            window = sdk.create_window("Drag", azimuth=10, elevation=-30)
+            point = window.frame.controls()["move"].mean(axis=0)
+            u, v = float(point[0]) / window.frame.width, float(point[1]) / window.frame.height
+            start_az, start_el = window._gaze_at_surface(10, -30, 38, 28, u, v)
+            wm.poll_events.side_effect = [
+                [{"type": "pointer_button", "window_id": 25, "button": "left",
+                  "pressed": True, "u": u, "v": v}], [], [],
+            ]
+            wm.get_state.side_effect = [
+                {"pointer": {"azimuth": start_az, "elevation": start_el, "buttons": ["left"]}},
+                {"pointer": {"azimuth": start_az + 3, "elevation": start_el + 1,
+                             "buttons": ["left"]}},
+                {"pointer": {"azimuth": start_az + 3, "elevation": start_el + 1,
+                             "buttons": []}},
+            ]
+            sdk.poll_events()
+            sdk.poll_events()  # No hit event: the caption moved away from gaze.
+            self.assertAlmostEqual(window.azimuth, 13)
+            self.assertAlmostEqual(window.elevation, -29)
+            sdk.poll_events()  # Release also missed the window.
+            self.assertIsNone(window.drag)
+
+    def test_caption_gray_is_neutral_for_rgb332_palette(self):
+        frame = BoayoAppFrame(400, 300, "Color")
+        image = frame.render(lambda *_: None)
+        point = frame.controls()["move"].mean(axis=0).astype(int)
+        self.assertEqual(tuple(image[point[1], point[0]]), (64, 64, 64))
+        red, green, blue = map(int, image[point[1], point[0]])
+        index = (red & 224) | ((green >> 3) & 28) | (blue >> 6)
+        level = index >> 5
+        self.assertEqual((index >> 2) & 7, level)
+        self.assertEqual(index & 3, (level * 255 // 7) >> 6)
+
     def test_sdk_routes_content_events_between_multiple_windows(self):
         wm = Mock()
         wm.create_window.side_effect = [{"window_id": 11}, {"window_id": 12}]

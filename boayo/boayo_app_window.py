@@ -6,14 +6,15 @@ uses the compositor background instead of pretending to provide alpha.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 import numpy as np
 
 try:
-    from boayo_ui import ACCENT, BLACK, INK, MUTED, PANEL, WHITE, BoayoSurface, point_in_polygon
+    from boayo_ui import ACCENT, BLACK, INK, MUTED, PANEL, WHITE, BoayoSurface, point_in_polygon, scaled_polygon
 except ImportError:
-    from .boayo_ui import ACCENT, BLACK, INK, MUTED, PANEL, WHITE, BoayoSurface, point_in_polygon
+    from .boayo_ui import ACCENT, BLACK, INK, MUTED, PANEL, WHITE, BoayoSurface, point_in_polygon, scaled_polygon
 
 
 @dataclass(frozen=True)
@@ -52,7 +53,7 @@ class BoayoAppFrame:
     def hit_test(self, u, v):
         x, y = float(u) * self.width, float(v) * self.height
         for name, polygon in self.controls().items():
-            if point_in_polygon(x, y, polygon):
+            if point_in_polygon(x, y, scaled_polygon(polygon, 1.25)):
                 return name
         if self.content.x <= x < self.content.x + self.content.width and self.content.y <= y < self.content.y + self.content.height:
             return "content"
@@ -68,7 +69,9 @@ class BoayoAppFrame:
         canvas.rounded_rect(box.x + 2, box.y + 2, box.width, box.height, 12, (13, 16, 21))
         canvas.rounded_rect(box.x, box.y, box.width, box.height, 12, PANEL)
         for name, polygon in self.controls().items():
-            color = (216, 68, 55) if name == "close" else (92, 105, 122)
+            # RGB332 represents (64,64,64) as true neutral gray. The previous
+            # (92,105,122) landed on a stronger green palette level on HDMI.
+            color = (216, 68, 55) if name == "close" else (64, 64, 64)
             canvas.rounded_polygon(polygon, 5, color)
         label_x = box.x + 170
         available = box.width - 230
@@ -94,8 +97,54 @@ class BoayoApplicationWindow:
         self.azimuth, self.elevation = float(azimuth), float(elevation)
         self.width_deg, self.height_deg = float(width_deg), float(height_deg)
         self.drag = None
+        self.last_drag_pose = None
         self.pressed_zone = None
         self.closed = False
+
+    @staticmethod
+    def _gaze_at_surface(azimuth, elevation, width_deg, height_deg, u, v):
+        """Recover the fixed world gaze where a caption drag started."""
+        az, el = math.radians(azimuth), math.radians(elevation)
+        center = np.asarray((math.cos(el) * math.sin(az), math.sin(el),
+                             -math.cos(el) * math.cos(az)))
+        right = np.asarray((math.cos(az), 0.0, math.sin(az)))
+        up = np.cross(right, center)
+        ray = (center + (2 * u - 1) * math.tan(math.radians(width_deg / 2)) * right +
+               (1 - 2 * v) * math.tan(math.radians(height_deg / 2)) * up)
+        ray /= np.linalg.norm(ray)
+        return math.degrees(math.atan2(ray[0], -ray[2])), math.degrees(math.asin(ray[1]))
+
+    def apply_gaze_drag(self, azimuth, elevation):
+        """Move or resize against the original world gaze, even off-window."""
+        if self.drag is None:
+            return False
+        pose = float(azimuth), float(elevation)
+        if self.last_drag_pose is not None and all(abs(a - b) < .01 for a, b in zip(pose, self.last_drag_pose)):
+            return False
+        self.last_drag_pose = pose
+        zone, _, _, base_az, base_el, base_w, base_h, start_az, start_el = self.drag
+        delta_az = (pose[0] - start_az + 180) % 360 - 180
+        delta_el = pose[1] - start_el
+        if zone == "move":
+            self.azimuth = (base_az + delta_az + 180) % 360 - 180
+            self.elevation = max(-89.5, min(89.5, base_el + delta_el))
+            self.wm.configure_window(self.window_id, azimuth=self.azimuth, elevation=self.elevation)
+        else:
+            factor = -1 if zone == "resize_left" else 1
+            new_w = max(10, min(100, base_w + factor * delta_az))
+            new_h = max(8, min(80, base_h - delta_el))
+            # Keep the opposite horizontal edge and the top edge in place.
+            self.azimuth = (base_az + factor * (new_w - base_w) / 2 + 180) % 360 - 180
+            self.elevation = max(-89.5, min(89.5, base_el - (new_h - base_h) / 2))
+            self.width_deg, self.height_deg = new_w, new_h
+            self.wm.configure_window(self.window_id, azimuth=self.azimuth,
+                                     elevation=self.elevation, width_deg=new_w, height_deg=new_h)
+        return True
+
+    def cancel_drag(self):
+        self.drag = None
+        self.last_drag_pose = None
+        self.pressed_zone = None
 
     def present(self, draw_content):
         """Draw content with a BoayoSurface callback; SDK adds the caption."""
@@ -142,18 +191,26 @@ class BoayoApplicationWindow:
             if event.get("pressed"):
                 self.pressed_zone = zone
                 if zone in ("move", "resize_left", "resize_right"):
+                    start_az, start_el = self._gaze_at_surface(
+                        self.azimuth, self.elevation, self.width_deg, self.height_deg,
+                        float(event["u"]), float(event["v"]),
+                    )
                     self.drag = (zone, float(event["u"]), float(event["v"]),
-                                 self.azimuth, self.elevation, self.width_deg, self.height_deg)
+                                 self.azimuth, self.elevation, self.width_deg, self.height_deg,
+                                 start_az, start_el)
+                    self.last_drag_pose = None
                 return zone
             if self.drag is not None:
-                self.drag = None
+                self.cancel_drag()
             elif zone == "close" and self.pressed_zone == "close":
                 self.wm.destroy_window(self.window_id)
                 self.closed = True
             self.pressed_zone = None
             return zone
         if kind == "pointer_motion" and self.drag is not None:
-            zone, u0, v0, az, el, wdeg, hdeg = self.drag
+            if "azimuth" in event and "elevation" in event:
+                return self.apply_gaze_drag(event["azimuth"], event["elevation"])
+            zone, u0, v0, az, el, wdeg, hdeg, _, _ = self.drag
             du, dv = float(event["u"]) - u0, float(event["v"]) - v0
             if zone == "move":
                 self.azimuth, self.elevation = az + du * wdeg, max(-89.5, min(89.5, el - dv * hdeg))

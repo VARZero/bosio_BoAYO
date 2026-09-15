@@ -30,6 +30,36 @@ def click_launcher_at_gaze(wm, shell, wid, panel_az, panel_el, yaw, pitch):
     return True
 
 
+class BTN2AppDrag:
+    """Keep the BOSIO pointer pressed while BTN2 and the gaze are moving."""
+
+    def __init__(self, wm):
+        self.wm = wm
+        self.held = False
+        self.last_pose = None
+
+    def press(self, yaw, pitch):
+        if self.held:
+            return
+        self.wm.pointer_warp(yaw, pitch)
+        self.wm.pointer_button(True)
+        self.held = True
+        self.last_pose = (yaw, pitch)
+
+    def move(self, yaw, pitch):
+        if self.held and (yaw, pitch) != self.last_pose:
+            self.wm.pointer_warp(yaw, pitch)
+            self.last_pose = (yaw, pitch)
+
+    def release(self, yaw, pitch):
+        if not self.held:
+            return
+        self.move(yaw, pitch)
+        self.wm.pointer_button(False)
+        self.held = False
+        self.last_pose = None
+
+
 def main():
     shell = BoayoLauncherShell(640, 360, "/home/xilinx/bosio_v2/boayo/apps.json")
     with BosioWMClient("boayo-desktop") as wm:
@@ -41,6 +71,7 @@ def main():
         last = 0.0
         last_surface_key = None
         panel_mapped = True
+        app_drag = BTN2AppDrag(wm)
         while True:
             now = time.monotonic()
             state = wm.get_state()
@@ -50,6 +81,7 @@ def main():
             for event in wm.poll_button_events():
                 if event["pressed"] and event["button"] in (0, 1):
                     # BTN0/BTN1 bring the single launcher panel to current gaze.
+                    app_drag.release(yaw, pitch)
                     wm.configure_window(wid, azimuth=yaw, elevation=pitch, mapped=True)
                     wm.focus_window(wid, raise_window=True)
                     panel_mapped = True
@@ -58,15 +90,17 @@ def main():
                     shell.selected_app = None
                     shell.active_app = None
                     print(f"BOAYO_PANEL_FOCUS BTN{event['button']} az={yaw:.2f} el={pitch:.2f}", flush=True)
-                elif event["button"] == 2 and event["pressed"]:
-                    if panel_mapped:
+                elif event["button"] == 2:
+                    if panel_mapped and event["pressed"]:
                         if click_launcher_at_gaze(wm, shell, wid, panel_az, panel_el, yaw, pitch):
                             panel_mapped = False
                             print(f"BOAYO_APP_STARTED {shell.last_launch}", flush=True)
-                    else:
-                        # The panel is gone; BTN2 now clicks the visible app.
-                        wm.pointer_warp(yaw, pitch)
-                        wm.pointer_button(True); wm.pointer_button(False)
+                    elif not panel_mapped:
+                        if event["pressed"]:
+                            app_drag.press(yaw, pitch)
+                        else:
+                            app_drag.release(yaw, pitch)
+            app_drag.move(yaw, pitch)
             shell.tick(now - last); last = now
             surface_key = shell.render_key()
             if panel_mapped and surface_key != last_surface_key:

@@ -116,6 +116,19 @@ class BoayoSDK:
                                          raw.get("button") if kind == "pointer_button" else None))
             elif kind == "focus":
                 result.append(BoayoEvent(window.window_id, kind, focused=bool(raw.get("focused"))))
+        # BOSIO routes ordinary pointer events to the current hit window. A
+        # dragged caption can move out from under the pointer, so follow the
+        # pointer's world pose and button state until release regardless of hit.
+        dragging = [window for window in self.windows.values() if window.drag is not None]
+        if dragging:
+            state = self.wm.get_state()
+            pointer = state.get("pointer") or {}
+            if "left" in pointer.get("buttons", ()):
+                for window in dragging:
+                    window.apply_gaze_drag(pointer["azimuth"], pointer["elevation"])
+            else:
+                for window in dragging:
+                    window.cancel_drag()
         return result
 
 
