@@ -12,7 +12,7 @@ def main():
     with BosioWMClient("boayo-desktop") as wm:
         win = wm.create_window("BoAYO Launcher", azimuth=0, elevation=0,
                                width_deg=42, height_deg=30,
-                               surface_width=640, surface_height=360)
+                               surface_width=640, surface_height=360, always_on_top=True)
         wid = win["window_id"]
         last = 0.0
         while True:
@@ -35,3 +35,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
