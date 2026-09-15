@@ -27,6 +27,7 @@ def main():
                     wm.configure_window(wid, azimuth=yaw, elevation=pitch, mapped=True)
                     wm.focus_window(wid, raise_window=True)
                     shell.selected_app = None
+                    shell.active_app = None
                     print(f"BOAYO_PANEL_FOCUS BTN{event['button']} az={yaw:.2f} el={pitch:.2f}", flush=True)
                 elif event["button"] == 2 and event["pressed"]:
                     # BTN2 is a click at gaze center. The launcher list starts
