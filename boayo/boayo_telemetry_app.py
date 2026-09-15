@@ -6,23 +6,25 @@ from pathlib import Path
 import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from bosio_wm_client import BosioWMClient
+from boayo_app_window import BoayoApplicationWindow
 
 def main():
-    h, w = 220, 360
     with BosioWMClient("telemetry") as wm:
-        info = wm.create_window("Telemetry", azimuth=float(os.environ.get("BOAYO_APP_AZIMUTH", 20)), elevation=float(os.environ.get("BOAYO_APP_ELEVATION", 0)),
-                                width_deg=36, height_deg=26,
-                                surface_width=w, surface_height=h)
-        wid = info["window_id"]
-        frame = np.full((h, w, 3), (248, 250, 253), dtype=np.uint8)
-        frame[62:138, 90:166] = (51, 181, 122)
-        frame[104:108, 188:300] = (51, 181, 122)
+        app = BoayoApplicationWindow(wm, "Telemetry",
+                                     float(os.environ.get("BOAYO_APP_AZIMUTH", 20)),
+                                     float(os.environ.get("BOAYO_APP_ELEVATION", 0)),
+                                     width_deg=36, height_deg=26, accent=(51, 181, 122))
         t = 0
-        while True:
-            pulse = int((np.sin(t * 0.12) + 1.0) * 0.5 * (w - 36))
-            frame[88:94, 18:18 + pulse] = (51, 181, 122)
-            frame[150:156, 18:18 + ((t * 7) % (w - 36))] = (52, 124, 255)
-            wm.update_surface(wid, frame)
+        while app.poll_events():
+            def draw(canvas, rect):
+                canvas.text("TELEMETRY", rect.x + 22, rect.y + 18, (22, 29, 40), scale=3, bold=True)
+                pulse = int((np.sin(t * .12) + 1) * .5 * (rect.width - 48))
+                canvas.rounded_rect(rect.x + 22, rect.y + 76, rect.width - 44, 14, 7, (211, 220, 230))
+                if pulse > 10:
+                    canvas.rounded_rect(rect.x + 22, rect.y + 76, pulse, 14, 7, (51, 181, 122))
+                canvas.rounded_rect(rect.x + 22, rect.y + 120, rect.width - 44, 10, 5, (211, 220, 230))
+                canvas.rounded_rect(rect.x + 22, rect.y + 120, 14 + (t * 7) % (rect.width - 58), 10, 5, (52, 124, 255))
+            app.present(draw)
             t += 1
             time.sleep(1.0 / 12.0)
 

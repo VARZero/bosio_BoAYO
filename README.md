@@ -71,6 +71,12 @@ BTN2는 시선 중심을 클릭합니다. 자세한 구조는 [docs/ARCHITECTURE
 실행에 성공하면 런처는 바로 숨겨지며 내장 전환 화면은 나타나지 않습니다.
 BTN0 또는 BTN1로 런처를 다시 열 수 있습니다.
 
+## BoAYo 애플리케이션 창과 캡션
+
+Bosio 스택은 구면 창의 위치, 포커스, 겹침과 HDMI 투영을 맡습니다. BoAYo 애플리케이션은 `boayo_app_window.py`의 `BoayoApplicationWindow`로 Bosio 창을 하나 만들고, BoAYo 표면에서 앱 내용과 아래 캡션을 함께 그려 그 창에 전달합니다. 예제 Dashboard와 Telemetry가 이 경로를 사용합니다. 런처 패널은 `BoayoLauncherShell`로 따로 그리며 캡션이 없습니다.
+
+현재 Bosio IPC 표면은 RGB24이므로 창 내부의 실제 알파 투명도는 전달하지 않습니다. 앱 내용 아래에는 창 폭 안에 들어가는 불투명 캡션 박스를 사용합니다. 양끝은 크기 조절, 왼쪽 빨간 버튼은 닫기, 가운데 회색 버튼은 이동입니다. BTN2 시선 클릭이 Bosio 창 이벤트를 거쳐 해당 BoAYo 컨트롤에 전달됩니다.
+
 ## 검증
 
 ```sh

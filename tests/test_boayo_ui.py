@@ -11,10 +11,51 @@ sys.path[:0] = [str(ROOT / "boayo"), str(ROOT / "vendor" / "bosio_SphericalWM" /
 from boayo_ui import PANEL, BoayoSurface
 from boayo_shell import BoayoScene, BoayoShell, BoayoLauncherShell, BoayoWorkspace
 from boayo_native_desktop import click_launcher_at_gaze
+from boayo_app_window import BoayoAppFrame, BoayoApplicationWindow
 from bosio_view_simulator import render_bosio_view
 
 
 class BoayoUITests(unittest.TestCase):
+    def test_application_caption_stays_within_its_surface_and_panel_has_none(self):
+        for width in (260, 400, 640):
+            frame = BoayoAppFrame(width, 220, "Demo")
+            for polygon in frame.controls().values():
+                self.assertGreaterEqual(polygon[:, 0].min(), frame.caption.x)
+                self.assertLessEqual(polygon[:, 0].max(), frame.caption.x + frame.caption.width)
+            image = frame.render(lambda canvas, rect: canvas.rect(rect.x + 20, rect.y + 20, 25, 20, (52, 124, 255)))
+            self.assertTrue(np.all(image[45, frame.content.x + 25] == (52, 124, 255)))
+            self.assertTrue(np.any(np.all(image[frame.caption.y + 10] == PANEL, axis=1)))
+        self.assertEqual(BoayoLauncherShell().caption_polygons(), {})
+
+    def test_application_caption_closes_only_on_a_completed_click(self):
+        wm = Mock()
+        wm.create_window.return_value = {"window_id": 7}
+        app = BoayoApplicationWindow(wm, "Demo", 0, 0, 38, 28)
+        point = app.frame.controls()["close"].mean(axis=0)
+        event = {"type": "pointer_button", "window_id": 7, "button": "left",
+                 "u": float(point[0]) / app.frame.width, "v": float(point[1]) / app.frame.height}
+        app.handle_event({**event, "pressed": True})
+        app.handle_event({**event, "pressed": False})
+        wm.destroy_window.assert_called_once_with(7)
+        self.assertTrue(app.closed)
+
+    def test_application_caption_move_and_resize_configure_bosio_window(self):
+        wm = Mock()
+        wm.create_window.return_value = {"window_id": 9}
+        app = BoayoApplicationWindow(wm, "Demo", 10, 5, 38, 28)
+        point = app.frame.controls()["move"].mean(axis=0)
+        u, v = float(point[0]) / app.frame.width, float(point[1]) / app.frame.height
+        app.handle_event({"type": "pointer_button", "window_id": 9, "button": "left", "pressed": True, "u": u, "v": v})
+        app.handle_event({"type": "pointer_motion", "window_id": 9, "u": u + .1, "v": v})
+        wm.configure_window.assert_called_with(9, azimuth=13.8, elevation=5.0)
+        app.handle_event({"type": "pointer_button", "window_id": 9, "button": "left", "pressed": False, "u": u + .1, "v": v})
+        wm.configure_window.reset_mock()
+        point = app.frame.controls()["resize_right"].mean(axis=0)
+        u, v = float(point[0]) / app.frame.width, float(point[1]) / app.frame.height
+        app.handle_event({"type": "pointer_button", "window_id": 9, "button": "left", "pressed": True, "u": u, "v": v})
+        app.handle_event({"type": "pointer_motion", "window_id": 9, "u": u + .1, "v": v})
+        wm.configure_window.assert_called_with(9, width_deg=41.8, height_deg=28.0)
+
     def test_content_surface_and_components(self):
         surface = BoayoSurface(160, 100)
         surface.card(8, 8, 90, 70, "SYSTEM", "READY")

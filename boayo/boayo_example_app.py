@@ -3,26 +3,27 @@
 from __future__ import annotations
 import os, sys, time
 from pathlib import Path
-import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from bosio_wm_client import BosioWMClient
+from boayo_app_window import BoayoApplicationWindow
 
 def main():
     log_path = os.environ.get("BOAYO_EXAMPLE_LOG", "/tmp/boayo-example-app.log")
     with open(log_path, "a", encoding="utf-8") as stream:
         stream.write(f"dashboard started pid={os.getpid()}\n"); stream.flush()
-    h, w = 240, 360
     with BosioWMClient("dashboard") as wm:
-        window = wm.create_window("Dashboard", azimuth=float(os.environ.get("BOAYO_APP_AZIMUTH", 0)), elevation=float(os.environ.get("BOAYO_APP_ELEVATION", 0)),
-                                  width_deg=38, height_deg=28,
-                                  surface_width=w, surface_height=h)
-        wid = window["window_id"] if isinstance(window, dict) else int(window)
-        frame = np.full((h, w, 3), (248, 250, 253), dtype=np.uint8)
-        frame[72:148, 90:166] = (52, 124, 255)
-        frame[106:110, 188:300] = (52, 124, 255)
-        wm.update_surface(wid, frame)
-        while True:
-            time.sleep(1.0)
+        app = BoayoApplicationWindow(wm, "Dashboard",
+                                     float(os.environ.get("BOAYO_APP_AZIMUTH", 0)),
+                                     float(os.environ.get("BOAYO_APP_ELEVATION", 0)),
+                                     width_deg=38, height_deg=28, accent=(52, 124, 255))
+        def draw(canvas, rect):
+            canvas.text("DASHBOARD", rect.x + 22, rect.y + 18, (22, 29, 40), scale=3, bold=True)
+            canvas.rounded_rect(rect.x + 22, rect.y + 60, 82, 78, 14, (52, 124, 255))
+            canvas.rounded_rect(rect.x + 122, rect.y + 96, rect.width - 152, 8, 4, (52, 124, 255))
+            canvas.text("LIVE WINDOW", rect.x + 22, rect.y + 156, (105, 116, 132), scale=2)
+        app.present(draw)
+        while app.poll_events():
+            time.sleep(.05)
 
 if __name__ == "__main__":
     main()
