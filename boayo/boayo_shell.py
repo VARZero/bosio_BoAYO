@@ -277,7 +277,6 @@ class BoayoLauncherShell(BoayoShell):
     def launch_app(self, app):
         if not app:
             return False
-        self.last_launch = app.get("name", app.get("id", "app"))
         command = app.get("command")
         if command:
             argv = self._command_argv(command)
@@ -288,11 +287,11 @@ class BoayoLauncherShell(BoayoShell):
                     env["BOAYO_APP_AZIMUTH"] = str(self.launch_pose[0])
                     env["BOAYO_APP_ELEVATION"] = str(self.launch_pose[1])
                     subprocess.Popen(argv, start_new_session=True, env=env)
+                    self.last_launch = app.get("name", app.get("id", "app"))
                     self.active_app = app
                     return True
                 except (OSError, ValueError):
                     pass
-        self.active_app = app
         return False
 
     def scroll(self, delta):
@@ -303,38 +302,15 @@ class BoayoLauncherShell(BoayoShell):
                                         self.scroll_offset - (1 if delta > 0 else -1)))
         return before != self.scroll_offset
 
-    def _render_builtin_app(self, canvas):
-        app = self.active_app
-        color_text = str(app.get("color", "#347CFF")).lstrip("#")
-        accent = tuple(int(color_text[i:i + 2], 16) for i in (0, 2, 4)) if len(color_text) == 6 else ACCENT
-        name = str(app.get("name", app.get("id", "APP"))).upper()
-        canvas.clear(BLACK)
-        canvas.rounded_rect(38, 28, self.width - 76, self.height - 56, 20, WHITE)
-        canvas.rounded_rect(58, 48, 58, 58, 14, accent)
-        canvas.text(name, 136, 61, INK, scale=3, bold=True)
-        canvas.text("BOAYO APPLICATION", 138, 88, MUTED, scale=1)
-        canvas.rounded_rect(58, 126, self.width - 116, 132, 14, PANEL)
-        canvas.text("APPLICATION READY", 82, 150, accent, scale=2, bold=True)
-        canvas.text("BTN1  BACK TO LAUNCHER", 82, 186, INK, scale=2)
-        canvas.text("GAZE + BTN0  SELECT", 82, 218, MUTED, scale=1)
-        canvas.rounded_rect(58, 278, self.width - 116, 10, 5, (211, 220, 230))
-        canvas.rounded_rect(58, 278, int((self.width - 116) * 0.72), 10, 5, accent)
-        return canvas.image()
-
     def render(self):
         key = self.render_key()
         if key == self._cached_render_key:
             return self.surface.image()
         canvas = self.surface
         if self.active_app is not None:
-            if not self.visible:
-                canvas.clear(BLACK)
-                self._cached_render_key = key
-                return canvas.image()
-            image = self._render_builtin_app(canvas)
-            self._draw_cursor(canvas)
+            canvas.clear(BLACK)
             self._cached_render_key = key
-            return image
+            return canvas.image()
         canvas.clear(BLACK)
         if not self.visible:
             self._cached_render_key = key

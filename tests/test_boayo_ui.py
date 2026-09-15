@@ -1,5 +1,6 @@
 import unittest
 import sys
+from unittest.mock import Mock, patch
 from pathlib import Path
 
 import numpy as np
@@ -9,6 +10,7 @@ sys.path[:0] = [str(ROOT / "boayo"), str(ROOT / "vendor" / "bosio_SphericalWM" /
 
 from boayo_ui import PANEL, BoayoSurface
 from boayo_shell import BoayoScene, BoayoShell, BoayoLauncherShell, BoayoWorkspace
+from boayo_native_desktop import click_launcher_at_gaze
 from bosio_view_simulator import render_bosio_view
 
 
@@ -77,15 +79,32 @@ class BoayoUITests(unittest.TestCase):
         shell.pointer_button(False)
         self.assertFalse(shell.visible)
 
-    def test_launcher_opens_builtin_when_command_is_missing(self):
-        from boayo_shell import BoayoLauncherShell
+    def test_launcher_launches_external_app_without_placeholder_surface(self):
         shell = BoayoLauncherShell(640, 360, ROOT / "boayo" / "apps.json")
         shell.selected_app = shell.apps[0]
         shell.hovered = "content"
-        shell.pointer_button(True)
-        shell.pointer_button(False)
+        with patch("boayo_shell.subprocess.Popen") as spawn:
+            shell.pointer_button(True)
+            shell.pointer_button(False)
+        spawn.assert_called_once()
         self.assertEqual(shell.active_app["id"], "dashboard")
-        self.assertEqual(shell.render().shape, (360, 640, 3))
+        self.assertTrue(np.all(shell.render() == (3, 5, 8)))
+
+    def test_failed_launch_keeps_launcher_visible(self):
+        shell = BoayoLauncherShell(640, 360, ROOT / "boayo" / "apps.json")
+        shell.selected_app = shell.apps[0]
+        with patch("boayo_shell.subprocess.Popen", side_effect=OSError("not executable")):
+            self.assertFalse(shell.launch_app(shell.selected_app))
+        self.assertIsNone(shell.active_app)
+        self.assertTrue(np.any(np.all(shell.render() == (250, 250, 249), axis=2)))
+
+    def test_successful_gaze_launch_unmaps_only_the_launcher(self):
+        shell = BoayoLauncherShell(640, 360, ROOT / "boayo" / "apps.json")
+        wm = Mock()
+        with patch("boayo_shell.subprocess.Popen"):
+            self.assertTrue(click_launcher_at_gaze(wm, shell, 3, 0, 0, 0, 8))
+        self.assertEqual(shell.active_app["id"], "dashboard")
+        wm.configure_window.assert_called_once_with(3, mapped=False)
 
     def test_scene_is_complete_bosio_rgb(self):
         scene = BoayoScene(BoayoShell(320, 180), m=8)
