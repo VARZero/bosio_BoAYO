@@ -286,6 +286,11 @@ class BoayoLauncherShell(BoayoShell):
                     env = os.environ.copy()
                     env["BOAYO_APP_AZIMUTH"] = str(self.launch_pose[0])
                     env["BOAYO_APP_ELEVATION"] = str(self.launch_pose[1])
+                    sdk_dir = os.path.dirname(os.path.abspath(__file__))
+                    stack_dir = os.path.dirname(sdk_dir)
+                    env["PYTHONPATH"] = os.pathsep.join(
+                        part for part in (sdk_dir, stack_dir, env.get("PYTHONPATH")) if part
+                    )
                     subprocess.Popen(argv, start_new_session=True, env=env)
                     self.last_launch = app.get("name", app.get("id", "app"))
                     self.active_app = app

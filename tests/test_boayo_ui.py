@@ -12,10 +12,51 @@ from boayo_ui import PANEL, BoayoSurface
 from boayo_shell import BoayoScene, BoayoShell, BoayoLauncherShell, BoayoWorkspace
 from boayo_native_desktop import click_launcher_at_gaze
 from boayo_app_window import BoayoAppFrame, BoayoApplicationWindow
+from boayo_sdk import BoayoSDK
 from bosio_view_simulator import render_bosio_view
 
 
 class BoayoUITests(unittest.TestCase):
+    def test_sdk_routes_content_events_between_multiple_windows(self):
+        wm = Mock()
+        wm.create_window.side_effect = [{"window_id": 11}, {"window_id": 12}]
+        with BoayoSDK("two-windows", wm=wm) as sdk:
+            first = sdk.create_window("First", azimuth=0, elevation=0)
+            second = sdk.create_window("Second", azimuth=20, elevation=0)
+            rect = first.frame.content
+            content_u = (rect.x + 20) / first.frame.width
+            content_v = (rect.y + 30) / first.frame.height
+            close = second.frame.controls()["close"].mean(axis=0)
+            close_u = float(close[0]) / second.frame.width
+            close_v = float(close[1]) / second.frame.height
+            wm.poll_events.return_value = [
+                {"type": "pointer_button", "window_id": 11, "button": "left", "pressed": True,
+                 "u": content_u, "v": content_v},
+                {"type": "pointer_button", "window_id": 12, "button": "left", "pressed": True,
+                 "u": close_u, "v": close_v},
+                {"type": "pointer_button", "window_id": 12, "button": "left", "pressed": False,
+                 "u": close_u, "v": close_v},
+            ]
+            events = sdk.poll_events()
+            self.assertEqual(len(events), 1)
+            self.assertEqual((events[0].window_id, events[0].type), (11, "pointer_button"))
+            self.assertAlmostEqual(events[0].x, 20)
+            self.assertAlmostEqual(events[0].y, 30)
+            self.assertTrue(second.closed)
+            self.assertFalse(first.closed)
+            self.assertEqual(list(sdk.windows), [11])
+            wm.destroy_window.assert_called_once_with(12)
+
+    def test_sdk_can_present_rendered_rgb_inside_boayo_caption(self):
+        wm = Mock()
+        wm.create_window.return_value = {"window_id": 21}
+        with BoayoSDK("image-app", wm=wm) as sdk:
+            window = sdk.create_window("Image", azimuth=0, elevation=0)
+            window.present_rgb(np.full((40, 80, 3), (20, 190, 70), dtype=np.uint8))
+            image = wm.update_surface.call_args.args[1]
+            self.assertTrue(np.any(np.all(image == (20, 190, 70), axis=2)))
+            self.assertTrue(np.any(np.all(image[window.frame.caption.y + 10] == PANEL, axis=1)))
+
     def test_application_caption_stays_within_its_surface_and_panel_has_none(self):
         for width in (260, 400, 640):
             frame = BoayoAppFrame(width, 220, "Demo")
@@ -128,6 +169,7 @@ class BoayoUITests(unittest.TestCase):
             shell.pointer_button(True)
             shell.pointer_button(False)
         spawn.assert_called_once()
+        self.assertIn(str(ROOT / "boayo"), spawn.call_args.kwargs["env"]["PYTHONPATH"])
         self.assertEqual(shell.active_app["id"], "dashboard")
         self.assertTrue(np.all(shell.render() == (3, 5, 8)))
 

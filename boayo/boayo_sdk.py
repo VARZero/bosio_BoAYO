@@ -1,0 +1,123 @@
+"""Public Python SDK for BoAYo applications running on the BOSIO stack.
+
+Applications draw only their content. This SDK owns the BOSIO IPC connection,
+renders the BoAYo caption, and dispatches content input by window ID.
+"""
+
+from __future__ import annotations
+
+import os
+from dataclasses import dataclass
+
+try:
+    from bosio_wm_client import BosioWMClient
+    from boayo_app_window import BoayoApplicationWindow
+    from boayo_ui import ACCENT, INK, MUTED, PANEL, WHITE, BoayoSurface
+except ImportError:
+    from .bosio_wm_client import BosioWMClient
+    from .boayo_app_window import BoayoApplicationWindow
+    from .boayo_ui import ACCENT, INK, MUTED, PANEL, WHITE, BoayoSurface
+
+
+SDK_VERSION = "0.1.0"
+
+
+@dataclass(frozen=True)
+class BoayoEvent:
+    """Input in pixels relative to the application content rectangle."""
+
+    window_id: int
+    type: str
+    x: float | None = None
+    y: float | None = None
+    pressed: bool | None = None
+    button: str | None = None
+    focused: bool | None = None
+
+
+class BoayoSDK:
+    """One BOSIO connection for any number of app-owned BoAYo windows.
+
+    Use as ``with BoayoSDK('my-app') as sdk``. ``poll_events()`` must be called
+    regularly even for static surfaces so caption buttons remain responsive.
+    """
+
+    def __init__(self, app_name, socket_path="/tmp/bosio-wm.sock", wm=None):
+        self.app_name = str(app_name)
+        self.socket_path = str(socket_path)
+        self.wm = wm
+        self.windows = {}
+        self._owns_connection = wm is None
+
+    def __enter__(self):
+        if self.wm is None:
+            self.wm = BosioWMClient(self.app_name, socket_path=self.socket_path)
+        return self
+
+    def __exit__(self, *_):
+        self.close()
+
+    def close(self):
+        if self.wm is not None and self._owns_connection:
+            self.wm.close()
+        self.wm = None
+        self.windows.clear()
+
+    def create_window(self, title, *, azimuth=None, elevation=None,
+                      width_deg=38, height_deg=28, width=400, height=300,
+                      accent=ACCENT):
+        if self.wm is None:
+            raise RuntimeError("enter the BoayoSDK context before creating windows")
+        if azimuth is None:
+            azimuth = float(os.environ.get("BOAYO_APP_AZIMUTH", "0"))
+        if elevation is None:
+            elevation = float(os.environ.get("BOAYO_APP_ELEVATION", "0"))
+        window = BoayoApplicationWindow(
+            self.wm, title, azimuth, elevation, width_deg, height_deg,
+            width=width, height=height, accent=accent,
+        )
+        self.windows[window.window_id] = window
+        return window
+
+    def destroy_window(self, window):
+        """Close one window while other windows of this app remain running."""
+        wid = window.window_id if isinstance(window, BoayoApplicationWindow) else int(window)
+        owned = self.windows.pop(wid, None)
+        if owned is None:
+            raise ValueError("window is not owned by this BoayoSDK instance")
+        self.wm.destroy_window(wid)
+        owned.closed = True
+
+    def poll_events(self):
+        """Route one IPC event batch to all windows and return content events."""
+        if self.wm is None:
+            raise RuntimeError("BoayoSDK connection is closed")
+        result = []
+        for raw in self.wm.poll_events():
+            window = self.windows.get(raw.get("window_id"))
+            if window is None:
+                continue
+            kind = raw.get("type")
+            area = None
+            x = y = None
+            if kind in ("pointer_motion", "pointer_button"):
+                u, v = float(raw.get("u", -1)), float(raw.get("v", -1))
+                area = window.frame.hit_test(u, v)
+                if area == "content":
+                    rect = window.frame.content
+                    x = u * window.frame.width - rect.x
+                    y = v * window.frame.height - rect.y
+            window.handle_event(raw)
+            if window.closed:
+                self.windows.pop(window.window_id, None)
+            if area == "content":
+                result.append(BoayoEvent(window.window_id, kind, x, y,
+                                         raw.get("pressed") if kind == "pointer_button" else None,
+                                         raw.get("button") if kind == "pointer_button" else None))
+            elif kind == "focus":
+                result.append(BoayoEvent(window.window_id, kind, focused=bool(raw.get("focused"))))
+        return result
+
+
+__all__ = ["BoayoSDK", "BoayoEvent", "BoayoApplicationWindow", "BoayoSurface",
+           "ACCENT", "INK", "MUTED", "PANEL", "WHITE", "SDK_VERSION"]

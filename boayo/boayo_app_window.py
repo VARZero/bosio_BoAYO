@@ -98,7 +98,40 @@ class BoayoApplicationWindow:
         self.closed = False
 
     def present(self, draw_content):
+        """Draw content with a BoayoSurface callback; SDK adds the caption."""
         self.wm.update_surface(self.window_id, self.frame.render(draw_content))
+
+    def present_rgb(self, rgb, fit="contain"):
+        """Put a rendered RGB image in the content area, then add the caption."""
+        image = np.asarray(rgb, dtype=np.uint8)
+        if image.ndim != 3 or image.shape[2] != 3 or not image.shape[0] or not image.shape[1]:
+            raise ValueError("rgb must have shape (height,width,3)")
+        if fit not in ("contain", "stretch"):
+            raise ValueError("fit must be 'contain' or 'stretch'")
+
+        def draw(canvas, rect):
+            available_w, available_h = rect.width - 16, rect.height - 16
+            if fit == "contain":
+                scale = min(available_w / image.shape[1], available_h / image.shape[0])
+                width = max(1, min(available_w, round(image.shape[1] * scale)))
+                height = max(1, min(available_h, round(image.shape[0] * scale)))
+            else:
+                width, height = available_w, available_h
+            xs = np.linspace(0, image.shape[1] - 1, width)
+            ys = np.linspace(0, image.shape[0] - 1, height)
+            x0, y0 = np.floor(xs).astype(np.int32), np.floor(ys).astype(np.int32)
+            x1 = np.minimum(x0 + 1, image.shape[1] - 1)
+            y1 = np.minimum(y0 + 1, image.shape[0] - 1)
+            ax, ay = (xs - x0)[None, :, None], (ys - y0)[:, None, None]
+            pixels = (image[y0[:, None], x0[None, :]] * (1 - ax) * (1 - ay) +
+                      image[y0[:, None], x1[None, :]] * ax * (1 - ay) +
+                      image[y1[:, None], x0[None, :]] * (1 - ax) * ay +
+                      image[y1[:, None], x1[None, :]] * ax * ay)
+            x = rect.x + (rect.width - width) // 2
+            y = rect.y + (rect.height - height) // 2
+            canvas.pixels[y:y + height, x:x + width] = np.rint(pixels).astype(np.uint8)
+
+        self.present(draw)
 
     def handle_event(self, event):
         if event.get("window_id") != self.window_id or self.closed:
