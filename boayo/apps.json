@@ -1,13 +1,74 @@
 {
-  "grid": { "columns": 4, "layout": "row-major" },
+  "grid": {
+    "columns": 4,
+    "layout": "row-major"
+  },
   "apps": [
-    { "id": "dashboard", "name": "Dashboard", "icon": "dashboard", "color": "#347CFF", "command": "/home/xilinx/bosio_v2/boayo/boayo_example_app.py", "enabled": true, "order": 1 },
-    { "id": "maps", "name": "Maps", "icon": "maps", "color": "#8566E8", "enabled": true, "order": 2 },
-    { "id": "telemetry", "name": "Telemetry", "icon": "telemetry", "color": "#33B57A", "enabled": true, "order": 3 },
-    { "id": "camera", "name": "Camera", "icon": "camera", "color": "#ED9450", "enabled": true, "order": 4 },
-    { "id": "messages", "name": "Messages", "icon": "messages", "color": "#E95E65", "enabled": true, "order": 5 },
-    { "id": "terminal", "name": "Terminal", "icon": "terminal", "color": "#5B718C", "enabled": true, "order": 6 },
-    { "id": "files", "name": "Files", "icon": "files", "color": "#32A8C7", "enabled": true, "order": 7 },
-    { "id": "settings", "name": "Settings", "icon": "settings", "color": "#D6AB31", "enabled": true, "order": 8 }
+    {
+      "id": "dashboard",
+      "name": "Dashboard",
+      "icon": "dashboard",
+      "color": "#347CFF",
+      "command": "/home/xilinx/bosio_v2/boayo/boayo_example_app.py",
+      "enabled": true,
+      "order": 1
+    },
+    {
+      "id": "maps",
+      "name": "Maps",
+      "icon": "maps",
+      "color": "#8566E8",
+      "enabled": true,
+      "order": 2
+    },
+    {
+      "id": "telemetry",
+      "name": "Telemetry",
+      "icon": "telemetry",
+      "color": "#33B57A",
+      "enabled": true,
+      "order": 3,
+      "command": "/home/xilinx/bosio_v2/boayo/boayo_telemetry_app.py"
+    },
+    {
+      "id": "camera",
+      "name": "Camera",
+      "icon": "camera",
+      "color": "#ED9450",
+      "enabled": true,
+      "order": 4
+    },
+    {
+      "id": "messages",
+      "name": "Messages",
+      "icon": "messages",
+      "color": "#E95E65",
+      "enabled": true,
+      "order": 5
+    },
+    {
+      "id": "terminal",
+      "name": "Terminal",
+      "icon": "terminal",
+      "color": "#5B718C",
+      "enabled": true,
+      "order": 6
+    },
+    {
+      "id": "files",
+      "name": "Files",
+      "icon": "files",
+      "color": "#32A8C7",
+      "enabled": true,
+      "order": 7
+    },
+    {
+      "id": "settings",
+      "name": "Settings",
+      "icon": "settings",
+      "color": "#D6AB31",
+      "enabled": true,
+      "order": 8
+    }
   ]
 }
