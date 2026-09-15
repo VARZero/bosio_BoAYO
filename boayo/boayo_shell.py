@@ -219,6 +219,13 @@ class BoayoLauncherShell(BoayoShell):
         self.last_launch = None
         self.launch_pose = (0.0, 0.0)
         self.scroll_offset = 0
+        self._cached_render_key = None
+
+    def render_key(self):
+        """Visible launcher state; gaze position belongs to the BOSIO window."""
+        return (self.visible, id(self.selected_app), id(self.active_app),
+                self.scroll_offset, self.pointer_source,
+                self.pointer if self.pointer_source == "mouse" else None)
 
     def caption_polygons(self):
         return {}
@@ -315,16 +322,22 @@ class BoayoLauncherShell(BoayoShell):
         return canvas.image()
 
     def render(self):
+        key = self.render_key()
+        if key == self._cached_render_key:
+            return self.surface.image()
         canvas = self.surface
         if self.active_app is not None:
             if not self.visible:
                 canvas.clear(BLACK)
+                self._cached_render_key = key
                 return canvas.image()
             image = self._render_builtin_app(canvas)
             self._draw_cursor(canvas)
+            self._cached_render_key = key
             return image
         canvas.clear(BLACK)
         if not self.visible:
+            self._cached_render_key = key
             return canvas.image()
         r = self.window
         canvas.rounded_rect(r.x + 3, r.y + 5, r.width, r.height, 20, (13, 16, 21))
@@ -363,6 +376,7 @@ class BoayoLauncherShell(BoayoShell):
         if len(self.apps) > visible:
             canvas.text("WHEEL", list_x + 8, y + height - 24, MUTED, scale=1)
         self._draw_cursor(canvas)
+        self._cached_render_key = key
         return canvas.image()
 
 

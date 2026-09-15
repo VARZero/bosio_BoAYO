@@ -4,9 +4,10 @@ BoAYO는 BOSIO 정이십면체 프레임버퍼 위에서 동작하는 시선 중
 플랫폼입니다. PYNQ-Z2의 GY-521 자세 입력으로 포커스를 이동하고 보드 버튼으로
 런처와 창을 조작합니다.
 
-BoAYO는 완성된 구면 장면을 SphericalWM의 scene-stream IPC로 전달합니다. 모든
-셀은 bilinear 보간하며 글자와 모서리처럼 명암 차이가 큰 셀에는 adaptive 4×4
-supersampling을 적용합니다.
+실사용 서비스는 런처를 BOSIO 창으로 띄우고 외부 앱도 각각 BOSIO 창을 만듭니다.
+BoAYo 표면의 둥근 모서리는 4×4 커버리지로 그리며, BOSIO 네이티브 합성기가
+삼각 셀 면적에 맞춰 bilinear/적응형 4×4 투영 AA를 적용합니다. 화면 내용이
+바뀌지 않으면 런처 표면을 다시 그리거나 전송하지 않습니다.
 
 기본 셀 분할도는 `M=16`이며 각 삼각 타일이 16×16개의 작은 삼각 셀을 갖습니다.
 
@@ -16,13 +17,13 @@ supersampling을 적용합니다.
 GY-521 자세 + PYNQ 버튼
           |
           v
-BoAYO 런처/창/시선 포커스
+BoAYo 런처 및 외부 앱의 BOSIO 창
           |
           v
-bilinear + adaptive 4x4 구면 투영
+둥근 UI 경계 AA + BOSIO 구면 투영 AA
           |
           v
-SphericalWM scene-stream -> BOSIO OutputCore -> HDMI
+SphericalWM 합성 -> BOSIO OutputCore -> HDMI
 ```
 
 ## 준비
@@ -61,14 +62,12 @@ systemctl is-enabled boayo-desktop.service
 systemctl is-active boayo-desktop.service
 ```
 
-BTN0은 현재 IMU 시선 위치에 새 실행 패널을 만들고 포커스를 옮깁니다. BTN1은
-런처를 현재 시선 위치로 다시 배치합니다. 마우스는 Linux evdev 포인터로 연결되어
-클릭과 휠 스크롤을 전달합니다. 자세한 구조는 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)를
+BTN0과 BTN1은 유일한 런처 패널을 현재 시선 위치로 옮기고 포커스를 줍니다.
+BTN2는 시선 중심을 클릭합니다. 자세한 구조는 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)를
 참고하세요.
 
-`apps.json`에 실행 가능한 `command`가 있으면 해당 프로그램을 시작합니다. 실행
-파일이 아직 없는 항목은 BoAYO 내장 앱 화면을 열기 때문에 버튼 동작을 즉시 확인할
-수 있습니다. BTN1을 누르면 현재 시선 방향에 런처를 다시 생성합니다.
+`apps.json`에 실행 가능한 `command`가 있는 항목만 런처에 표시합니다.
+선택한 프로그램은 별도 프로세스로 시작하고 BOSIO API로 자기 창을 만듭니다.
 
 ## 검증
 

@@ -23,6 +23,24 @@ class BoayoUITests(unittest.TestCase):
         self.assertTrue(np.any(np.all(image == PANEL, axis=2)))
         self.assertTrue(np.any(np.any(image != 0, axis=2)))
 
+    def test_rounded_panel_corners_blend_into_the_existing_surface(self):
+        surface = BoayoSurface(80, 60, background=(0, 0, 0))
+        surface.rounded_rect(10, 10, 50, 38, 16, (255, 255, 255))
+        image = surface.image()
+        corner = image[10:26, 10:26, 0]
+        self.assertTrue(np.any((corner > 0) & (corner < 255)))
+        self.assertTrue(np.all(image[30, 20] == 255))
+        self.assertTrue(np.all(image[10, 10] == 0))
+
+    def test_circle_and_polygon_edges_have_partial_coverage(self):
+        surface = BoayoSurface(80, 60, background=(0, 0, 0))
+        surface.circle(20, 20, 8, (255, 255, 255))
+        self.assertTrue(np.any((surface.image()[10:30, 10:30, 0] > 0) &
+                               (surface.image()[10:30, 10:30, 0] < 255)))
+        surface.polygon(((41.3, 10), (70, 11.5), (53, 40)), (255, 255, 255))
+        self.assertTrue(np.any((surface.image()[8:42, 38:72, 0] > 0) &
+                               (surface.image()[8:42, 38:72, 0] < 255)))
+
     def test_caption_focus_brightens_and_grows(self):
         shell = BoayoShell()
         points = shell.caption_polygons()["move"]
@@ -107,6 +125,17 @@ class BoayoUITests(unittest.TestCase):
         self.assertEqual(shell.scroll_offset, 0)
         self.assertTrue(shell.scroll(-1))
         self.assertEqual(shell.scroll_offset, 1)
+
+    def test_launcher_surface_key_changes_only_when_visible_content_changes(self):
+        shell = BoayoLauncherShell(640, 360, ROOT / "boayo" / "apps.json")
+        first_key = shell.render_key()
+        first = shell.render().copy()
+        shell.pointer_motion(320, 150)
+        self.assertEqual(shell.render_key(), first_key)
+        self.assertTrue(np.array_equal(shell.render(), first))
+        shell.selected_app = shell.apps[0]
+        self.assertNotEqual(shell.render_key(), first_key)
+        self.assertFalse(np.array_equal(shell.render(), first))
 
     def test_mouse_cursor_is_rendered_on_panel(self):
         shell = BoayoShell(320, 180)

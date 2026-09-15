@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from functools import lru_cache
 import numpy as np
 
 try:
@@ -15,6 +16,17 @@ INK = (22, 29, 40)
 MUTED = (105, 116, 132)
 PANEL = (239, 242, 246)
 ACCENT = (44, 112, 246)
+
+
+@lru_cache(maxsize=32)
+def _rounded_corner_coverage(radius):
+    """Four-by-four subpixel coverage for one rounded-rectangle corner."""
+    yy, xx = np.mgrid[:radius, :radius].astype(np.float32)
+    coverage = np.zeros((radius, radius), dtype=np.uint8)
+    for oy in (.125, .375, .625, .875):
+        for ox in (.125, .375, .625, .875):
+            coverage += ((xx + ox - radius) ** 2 + (yy + oy - radius) ** 2 <= radius ** 2)
+    return coverage
 
 
 def scaled_polygon(points, scale):
@@ -60,6 +72,17 @@ class BoayoSurface:
     def clear(self, color=BLACK):
         self.pixels[:] = color
 
+    def _blend_coverage(self, x, y, coverage, color):
+        height, width = coverage.shape
+        x0, y0 = max(0, x), max(0, y)
+        x1, y1 = min(self.width, x + width), min(self.height, y + height)
+        if x0 >= x1 or y0 >= y1:
+            return
+        mask = coverage[y0 - y:y1 - y, x0 - x:x1 - x].astype(np.uint16)[..., None]
+        block = self.pixels[y0:y1, x0:x1]
+        block[:] = ((block.astype(np.uint16) * (16 - mask) +
+                     np.asarray(color, dtype=np.uint16) * mask + 8) // 16).astype(np.uint8)
+
     def rect(self, x, y, width, height, color, fill=True, stroke=1):
         x0, y0 = max(0, int(x)), max(0, int(y))
         x1, y1 = min(self.width, int(x + width)), min(self.height, int(y + height))
@@ -81,18 +104,15 @@ class BoayoSurface:
         self.rect(x, y + radius, width, height - radius * 2, color)
         if radius == 0:
             return
-        yy, xx = np.ogrid[:radius, :radius]
-        circle = (xx - radius + 0.5) ** 2 + (yy - radius + 0.5) ** 2 <= radius ** 2
+        corner = _rounded_corner_coverage(radius)
         corners = (
-            (slice(y, y + radius), slice(x, x + radius), circle),
-            (slice(y, y + radius), slice(x + width - radius, x + width), np.fliplr(circle)),
-            (slice(y + height - radius, y + height), slice(x, x + radius), np.flipud(circle)),
-            (slice(y + height - radius, y + height), slice(x + width - radius, x + width), np.flipud(np.fliplr(circle))),
+            (x, y, corner),
+            (x + width - radius, y, np.fliplr(corner)),
+            (x, y + height - radius, np.flipud(corner)),
+            (x + width - radius, y + height - radius, np.flipud(np.fliplr(corner))),
         )
-        for ys, xs, mask in corners:
-            block = self.pixels[ys, xs]
-            if block.shape[:2] == mask.shape:
-                block[mask] = color
+        for px, py, mask in corners:
+            self._blend_coverage(px, py, mask, color)
 
     def polygon(self, points, color):
         points = np.asarray(points, dtype=np.float32)
@@ -103,24 +123,35 @@ class BoayoSurface:
         if x0 >= x1 or y0 >= y1:
             return
         yy, xx = np.mgrid[y0:y1, x0:x1]
-        inside = np.zeros(xx.shape, dtype=bool)
-        previous = points[-1]
-        for current in points:
-            px, py = previous
-            cx, cy = current
-            crossing = ((py > yy) != (cy > yy)) & (xx < (cx - px) * (yy - py) / ((cy - py) or 1e-6) + px)
-            inside ^= crossing
-            previous = current
-        self.pixels[y0:y1, x0:x1][inside] = color
+        coverage = np.zeros(xx.shape, dtype=np.uint8)
+        for oy in (.125, .375, .625, .875):
+            for ox in (.125, .375, .625, .875):
+                inside = np.zeros(xx.shape, dtype=bool)
+                previous = points[-1]
+                for current in points:
+                    px, py = previous
+                    cx, cy = current
+                    crossing = ((py > yy + oy) != (cy > yy + oy)) & \
+                               (xx + ox < (cx - px) * (yy + oy - py) / ((cy - py) or 1e-6) + px)
+                    inside ^= crossing
+                    previous = current
+                coverage += inside.astype(np.uint8)
+        self._blend_coverage(x0, y0, coverage, color)
 
     def rounded_polygon(self, points, radius, color):
         self.polygon(rounded_polygon_path(points, radius), color)
 
     def circle(self, cx, cy, radius, color):
-        y0, y1 = max(0, int(cy - radius)), min(self.height, int(cy + radius + 1))
-        x0, x1 = max(0, int(cx - radius)), min(self.width, int(cx + radius + 1))
+        y0, y1 = max(0, int(np.floor(cy - radius))), min(self.height, int(np.ceil(cy + radius)))
+        x0, x1 = max(0, int(np.floor(cx - radius))), min(self.width, int(np.ceil(cx + radius)))
+        if x0 >= x1 or y0 >= y1:
+            return
         yy, xx = np.ogrid[y0:y1, x0:x1]
-        self.pixels[y0:y1, x0:x1][(xx - cx) ** 2 + (yy - cy) ** 2 <= radius ** 2] = color
+        coverage = np.zeros((y1 - y0, x1 - x0), dtype=np.uint8)
+        for oy in (.125, .375, .625, .875):
+            for ox in (.125, .375, .625, .875):
+                coverage += ((xx + ox - cx) ** 2 + (yy + oy - cy) ** 2 <= radius ** 2)
+        self._blend_coverage(x0, y0, coverage, color)
 
     def text(self, value, x, y, color=INK, scale=2, bold=False):
         cursor = int(x)

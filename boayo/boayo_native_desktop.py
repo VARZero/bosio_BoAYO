@@ -17,6 +17,7 @@ def main():
         wid = win["window_id"]
         panel_az, panel_el = 0.0, 0.0
         last = 0.0
+        last_surface_key = None
         while True:
             now = time.monotonic()
             state = wm.get_state()
@@ -47,7 +48,10 @@ def main():
                             shell.pointer_button(True); shell.pointer_button(False)
                     print("BOAYO_BTN2_CLICK", flush=True)
             shell.tick(now - last); last = now
-            wm.update_surface(wid, shell.render())
+            surface_key = shell.render_key()
+            if surface_key != last_surface_key:
+                wm.update_surface(wid, shell.render())
+                last_surface_key = surface_key
             time.sleep(1.0 / 30.0)
 
 if __name__ == "__main__":
