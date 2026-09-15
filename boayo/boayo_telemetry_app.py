@@ -10,7 +10,7 @@ from bosio_wm_client import BosioWMClient
 def main():
     h, w = 220, 360
     with BosioWMClient("telemetry") as wm:
-        info = wm.create_window("Telemetry", azimuth=20, elevation=0,
+        info = wm.create_window("Telemetry", azimuth=float(os.environ.get("BOAYO_APP_AZIMUTH", 20)), elevation=float(os.environ.get("BOAYO_APP_ELEVATION", 0)),
                                 width_deg=36, height_deg=26,
                                 surface_width=w, surface_height=h)
         wid = info["window_id"]
@@ -30,3 +30,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

@@ -13,7 +13,7 @@ def main():
         stream.write(f"dashboard started pid={os.getpid()}\n"); stream.flush()
     h, w = 240, 360
     with BosioWMClient("dashboard") as wm:
-        window = wm.create_window("Dashboard", azimuth=0, elevation=0,
+        window = wm.create_window("Dashboard", azimuth=float(os.environ.get("BOAYO_APP_AZIMUTH", 0)), elevation=float(os.environ.get("BOAYO_APP_ELEVATION", 0)),
                                   width_deg=38, height_deg=28,
                                   surface_width=w, surface_height=h)
         wid = window["window_id"] if isinstance(window, dict) else int(window)
@@ -28,3 +28,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
