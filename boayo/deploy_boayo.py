@@ -71,7 +71,7 @@ def deploy(ssh):
         for name in FILES:
             temporary = f"/tmp/{name}.upload"
             sftp.put(str(source / name), temporary)
-            mode = "0755" if name == "boayo_example_app.py" else "0644"
+            mode = "0755" if name in ("boayo_example_app.py", "boayo_telemetry_app.py") else "0644"
             command(ssh, f"install -m {mode} {temporary} {REMOTE_APP}/{name} && rm -f {temporary}")
     finally:
         sftp.close()
@@ -121,3 +121,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
