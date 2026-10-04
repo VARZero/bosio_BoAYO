@@ -14,17 +14,18 @@ BoAYo 표면의 둥근 모서리는 4×4 커버리지로 그리며, BOSIO 네이
 ## 구성
 
 ```text
-GY-521 자세 + PYNQ 버튼
-          |
-          v
-BoAYo 런처 및 외부 앱의 BOSIO 창
-          |
-          v
-둥근 UI 경계 AA + BOSIO 구면 투영 AA
-          |
-          v
-SphericalWM 합성 -> BOSIO OutputCore -> HDMI
+BoAYo 런처/앱 SDK -> RGB 표면·캡션 -> SphericalWM 구면 합성·AA
+                                                     |
+                                                     v
+                         드라이버 DDR 장면 갱신 -> BS25 캐시 -> RTL 투영 -> HDMI
+GY-521 -> FPGA 센서 허브 -> AXI4-Stream 자세 -> RTL 자세 엔진
+PYNQ 버튼 -> SphericalWM 입력 이벤트 -> BoAYo 런처/SDK
 ```
+
+현재 BS25는 64바이트 라인·16KiB·2-way 캐시를 사용합니다. 앱은 캐시나
+DDR 버퍼를 직접 관리하지 않으며 SDK 사용법은 그대로입니다.
+[BOSIO DDR 캐시 문서](vendor/bosio_SphericalWM/docs/BOSIO_DDR_CACHE.md)에
+드라이버 동작과 실제 보드 측정 범위를 정리했습니다.
 
 ## 준비
 

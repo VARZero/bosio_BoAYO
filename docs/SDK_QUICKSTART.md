@@ -6,6 +6,12 @@
 
 ## 실행 환경
 
+Bosio 창 관리자가 먼저 실행되어 있어야 합니다. 앱은 BoAYo SDK로 창 이미지와
+이벤트만 다루며, BS25 캐시와 DDR 장면 버퍼는 데몬의 드라이버가 관리합니다.
+앱에서 비트스트림을 다시 로드하거나 `BosioV2`를 별도로 생성하지 마세요.
+캐시 설정과 보드 성능은 [DDR 캐시 문서](../vendor/bosio_SphericalWM/docs/BOSIO_DDR_CACHE.md)에
+있습니다. SDK 호출 방식은 캐시 전환 전후에 동일합니다.
+
 PYNQ-Z2에서 BoAYo를 배포하면 SDK와 Bosio 클라이언트가 `/home/xilinx/bosio_v2/boayo`에 있습니다. 런처의 `apps.json`에서 실행된 앱에는 필요한 `PYTHONPATH`와 실행 시선의 `BOAYO_APP_AZIMUTH`, `BOAYO_APP_ELEVATION`이 자동 전달됩니다. 런처 밖에서 직접 실행할 때는 다음처럼 경로를 설정합니다.
 
 ```sh
