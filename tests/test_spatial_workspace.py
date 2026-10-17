@@ -126,8 +126,9 @@ class SpatialIntegrationTests(unittest.TestCase):
             for wid in other.caption.ids.values():
                 control = self.manager.windows[wid]
                 self.assertTrue(control.mapped)
-                self.assertEqual((control.width_deg, control.height_deg), (4, 4))
-                self.assertEqual((control.surface_width, control.surface_height), (40, 40))
+                move = wid == other.caption.ids["move"]
+                self.assertEqual((control.width_deg, control.height_deg), (2.88, 10) if move else (4, 4))
+                self.assertEqual((control.surface_width, control.surface_height), (40, 100 if move else 40))
             self.assertEqual((other.frame.content.width, other.frame.content.height), (540, 358))
         close = self.manager.windows[other.caption.ids["close"]]
         self.manager.pointer_warp(close.azimuth, close.elevation)
@@ -141,6 +142,42 @@ class SpatialIntegrationTests(unittest.TestCase):
         revision = self.manager.generation
         self.sdk.poll_events()
         self.assertEqual(self.manager.generation, revision)  # Idle captions cause no updates.
+
+    def test_caption_rows_follow_parent_at_high_latitudes_and_yaw_wrap(self):
+        import math
+        import numpy as np
+        from bosio_window_manager import _basis
+
+        app = self.window
+        ids = dict(app.caption.ids)
+        surface_revisions = {wid: self.manager.windows[wid].surface_revision for wid in ids.values()}
+        # Exercise initial creation as well as moving/resizing existing controls.
+        for az, el, width, height in ((179, 4, 38, 28), (1, -58, 38, 28),
+                                      (-179, 80, 10, 8), (181, -80, 100, 80),
+                                      (20, 90, 38, 28), (-20, -90, 38, 28)):
+            app.azimuth, app.elevation = az, el
+            app.width_deg, app.height_deg = width, height
+            app.wm.configure_window(app.window_id, azimuth=az, elevation=el,
+                                    width_deg=width, height_deg=height)
+            app.caption.sync()
+            parent, parent_right, parent_up = _basis(az, el)
+            for wid in ids.values():
+                button = self.manager.windows[wid]
+                center, right, _ = _basis(button.azimuth, button.elevation, button.roll)
+                endpoints = np.array([center-right*math.tan(math.radians(2)),
+                                      center+right*math.tan(math.radians(2))])
+                depth = endpoints @ parent
+                screen_x = (endpoints @ parent_right)/depth
+                screen_y = (endpoints @ parent_up)/depth
+                self.assertAlmostEqual(screen_y[0], screen_y[1], delta=1e-6)
+                self.assertGreater(screen_x[1], screen_x[0])
+                self.assertEqual((button.width_deg, button.height_deg),
+                                 (2.88, 10) if wid == ids["move"] else (4, 4))
+                self.assertEqual(button.surface_revision, surface_revisions[wid])
+            self.assertEqual(app.caption.ids, ids)
+            generation = self.manager.generation
+            app.caption.sync()
+            self.assertEqual(self.manager.generation, generation)
 
     def test_resize_via_caption_keeps_button_size_and_content_resolution(self):
         resize = self.manager.windows[self.window.caption.ids["resize_right"]]
@@ -157,7 +194,8 @@ class SpatialIntegrationTests(unittest.TestCase):
         self.assertEqual((self.window.frame.width, self.window.frame.height), (400, 300))
         for wid in self.window.caption.ids.values():
             button = self.manager.windows[wid]
-            self.assertEqual((button.width_deg, button.height_deg), (4, 4))
+            self.assertEqual((button.width_deg, button.height_deg),
+                             (2.88, 10) if wid == self.window.caption.ids["move"] else (4, 4))
 
     def minimize(self):
         self.window.minimize()
