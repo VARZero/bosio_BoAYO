@@ -19,7 +19,7 @@ except ImportError:
     from .boayo_ui import ACCENT, INK, MUTED, PANEL, WHITE, BoayoSurface
 
 
-SDK_VERSION = "0.2.0"
+SDK_VERSION = "0.3.0"
 
 
 @dataclass(frozen=True)
@@ -49,6 +49,7 @@ class BoayoSDK:
         self.wm = wm
         self.windows = {}
         self._reported_sizes = {}
+        self._reported_visibility = {}
         self._owns_connection = wm is None
 
     def __enter__(self):
@@ -65,6 +66,7 @@ class BoayoSDK:
         self.wm = None
         self.windows.clear()
         self._reported_sizes.clear()
+        self._reported_visibility.clear()
 
     def create_window(self, title, *, azimuth=None, elevation=None,
                       width_deg=38, height_deg=28, width=400, height=300,
@@ -81,6 +83,7 @@ class BoayoSDK:
         )
         self.windows[window.window_id] = window
         self._reported_sizes[window.window_id] = (window.width_deg, window.height_deg)
+        self._reported_visibility[window.window_id] = False
         return window
 
     def window_state(self, window):
@@ -99,6 +102,7 @@ class BoayoSDK:
             raise ValueError("window is not owned by this BoayoSDK instance")
         self.wm.destroy_window(wid)
         self._reported_sizes.pop(wid, None)
+        self._reported_visibility.pop(wid, None)
         owned.closed = True
 
     def poll_events(self):
@@ -116,14 +120,17 @@ class BoayoSDK:
             if kind in ("pointer_motion", "pointer_button"):
                 u, v = float(raw.get("u", -1)), float(raw.get("v", -1))
                 area = window.frame.hit_test(u, v)
-                if area == "content":
+                if area == "content" and window.drag is None and not window.minimized and not window._transition:
                     rect = window.frame.content
                     x = u * window.frame.width - rect.x
                     y = v * window.frame.height - rect.y
+                else:
+                    area = None
             window.handle_event(raw)
             if window.closed:
                 self.windows.pop(window.window_id, None)
                 self._reported_sizes.pop(window.window_id, None)
+                self._reported_visibility.pop(window.window_id, None)
             if area == "content":
                 result.append(BoayoEvent(window.window_id, kind, x, y,
                                          raw.get("pressed") if kind == "pointer_button" else None,
@@ -143,10 +150,17 @@ class BoayoSDK:
                     window.apply_gaze_drag(pointer["azimuth"], pointer["elevation"])
             else:
                 for window in dragging:
-                    window.cancel_drag()
+                    cancelled = pointer.get("cancel_serial", 0) != window._cancel_serial
+                    window._cancel_serial = pointer.get("cancel_serial", 0)
+                    final = pointer.get("last_left_release") or pointer
+                    window.finish_drag(final.get("azimuth"), final.get("elevation"), cancelled=cancelled)
         # One latest size snapshot per window per poll. Caption drags may be
         # followed from the global pointer after hit events stop arriving.
         for window in self.windows.values():
+            window.tick()
+            if window.minimized != self._reported_visibility.get(window.window_id, False):
+                result.append(BoayoEvent(window.window_id, "minimize" if window.minimized else "restore", state=window.state))
+                self._reported_visibility[window.window_id] = window.minimized
             size = (window.width_deg, window.height_deg)
             if size != self._reported_sizes.get(window.window_id):
                 result.append(BoayoEvent(window.window_id, "resize", state=window.state))

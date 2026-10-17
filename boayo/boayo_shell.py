@@ -9,11 +9,17 @@ from __future__ import annotations
 import math
 import json
 import os
+import sys
 import shlex
 import subprocess
 from dataclasses import dataclass
 
 import numpy as np
+
+try:
+    from boayo_theme import CHROME, RAISED, EDGE, FOCUS, TEXT, SUBTLE, orbit_mark
+except ImportError:
+    from .boayo_theme import CHROME, RAISED, EDGE, FOCUS, TEXT, SUBTLE, orbit_mark
 
 try:
     from boayo_ui import ACCENT, BLACK, INK, MUTED, PANEL, WHITE, BoayoSurface, point_in_polygon, scaled_polygon
@@ -215,6 +221,7 @@ class BoayoLauncherShell(BoayoShell):
         self.apps_path = apps_path or os.path.join(os.path.dirname(__file__), "apps.json")
         self.apps = self._load_apps()
         self.selected_app = None
+        self.hovered_app = None
         self.active_app = None
         self.last_launch = None
         self.launch_pose = (0.0, 0.0)
@@ -223,7 +230,7 @@ class BoayoLauncherShell(BoayoShell):
 
     def render_key(self):
         """Visible launcher state; gaze position belongs to the BOSIO window."""
-        return (self.visible, id(self.selected_app), id(self.active_app),
+        return (self.visible, id(self.selected_app), id(self.hovered_app), id(self.active_app),
                 self.scroll_offset, self.pointer_source,
                 self.pointer if self.pointer_source == "mouse" else None)
 
@@ -249,17 +256,24 @@ class BoayoLauncherShell(BoayoShell):
         except (OSError, ValueError, TypeError):
             return []
 
-    def _select_content(self, x, y):
-        # Each visible launcher row (icon + label) is one click target.
+    def _app_at_point(self, x, y):
         r = self.window
-        left = r.x + r.width * 0.34
-        right = r.x + r.width - 18
-        top = r.y + 22
+        left, right, top = r.x + r.width * .34 + 20, r.x + r.width - 18, r.y + 22
         row_height = 54
+        visible = max(1, min(5, int((r.height - 38) / row_height)))
+        if not (left <= x <= right and top <= y < top + visible * row_height):
+            return None
         row = int((y - top) / row_height)
         index = self.scroll_offset + row
-        if left <= x <= right and 0 <= row and 0 <= index < len(self.apps):
-            self.selected_app = self.apps[index]
+        return self.apps[index] if index < len(self.apps) else None
+
+    def pointer_motion(self, x, y):
+        hit = super().pointer_motion(x, y)
+        self.hovered_app = self._app_at_point(x, y) if self.visible else None
+        return hit
+
+    def _select_content(self, x, y):
+        self.selected_app = self._app_at_point(x, y)
 
     def pointer_button(self, pressed):
         result = super().pointer_button(pressed)
@@ -271,7 +285,7 @@ class BoayoLauncherShell(BoayoShell):
     def _command_argv(command):
         argv = shlex.split(str(command))
         if argv and argv[0].endswith(".py"):
-            argv.insert(0, os.environ.get("PYTHON", "python3"))
+            argv.insert(0, os.environ.get("PYTHON", sys.executable))
         return argv
 
     def launch_app(self, app):
@@ -321,23 +335,17 @@ class BoayoLauncherShell(BoayoShell):
             self._cached_render_key = key
             return canvas.image()
         r = self.window
-        canvas.rounded_rect(r.x + 3, r.y + 5, r.width, r.height, 20, (13, 16, 21))
-        canvas.rounded_rect(r.x, r.y, r.width, r.height, 18, WHITE)
+        canvas.rounded_rect(r.x, r.y, r.width, r.height, 18, EDGE)
+        canvas.rounded_rect(r.x + 2, r.y + 2, r.width - 4, r.height - 4, 16, CHROME)
         x, y, width, height = map(int, (r.x, r.y, r.width, r.height))
         split = x + int(width * 0.34)
-        canvas.rounded_rect(x + 10, y + 10, split - x - 16, height - 20, 14, PANEL)
-        canvas.rect(split - 3, y + 22, 1, height - 44, (213, 220, 229))
-        # Device status: battery is intentionally only a thin indicator.
-        canvas.rounded_rect(x + 24, y + 30, split - x - 44, 7, 4, (211, 220, 230))
-        canvas.rounded_rect(x + 24, y + 30, int((split - x - 44) * 0.82), 7, 4, (57, 184, 121))
-        # Large proportional volume tile.
-        vx, vy, vw, vh = x + 24, y + 66, split - x - 44, 68
-        canvas.rounded_rect(vx, vy, vw, vh, 16, (216, 224, 233))
-        canvas.rounded_rect(vx, vy, int(vw * 0.64), vh, 16, ACCENT)
-        canvas.text(">))", vx + 15, vy + 23, WHITE, scale=3, bold=True)
-        # Re-center action remains available without a caption bar.
-        canvas.rounded_rect(x + 24, y + height - 62, split - x - 44, 34, 8, WHITE)
-        canvas.text("CENTER", x + 30, y + height - 55, INK, scale=3, bold=True)
+        canvas.rect(split - 3, y + 22, 1, height - 44, EDGE)
+        orbit_mark(canvas, x + 52, y + 46)
+        canvas.text("BOAYO", x + 24, y + 80, TEXT, scale=3, bold=True)
+        canvas.text("WORKSPACE", x + 24, y + 111, SUBTLE, scale=2)
+        canvas.text("LOOK / HOLD", x + 24, y + 147, SUBTLE, scale=1)
+        canvas.text("DOWN TO STORE", x + 24, y + 166, SUBTLE, scale=1)
+        canvas.text("BTN1: APP LIST", x + 24, y + height - 37, SUBTLE, scale=1)
         list_x, list_y = split + 20, y + 22
         row_h = 54
         visible = max(1, min(5, int((height - 38) / row_h)))
@@ -347,15 +355,19 @@ class BoayoLauncherShell(BoayoShell):
                 break
             app = self.apps[index]
             bx, by = list_x, list_y + row * row_h
-            selected = app is self.selected_app
+            selected = app is self.hovered_app or app is self.selected_app
             if selected:
-                canvas.rounded_rect(bx, by, x + width - bx - 18, row_h - 5, 9, (228, 239, 255))
+                canvas.rounded_rect(bx, by, x + width - bx - 18, row_h - 5, 9, RAISED)
             color = tuple(int(app.get("color", "#347CFF").lstrip("#")[i:i + 2], 16) for i in (0, 2, 4)) if isinstance(app.get("color"), str) and len(app.get("color", "").lstrip("#")) == 6 else ACCENT
             canvas.rounded_rect(bx + 8, by + 5, 38, 38, 11, color)
             label = str(app.get("name", app.get("id", "APP")))[:9]
-            canvas.text(label, bx + 56, by + 10, INK, scale=4, bold=True)
+            canvas.text(str(index + 1), bx + 22, by + 15, TEXT, scale=2, bold=True)
+            canvas.text(label, bx + 56, by + 10, TEXT, scale=3, bold=True)
+            canvas.text("OPEN AT GAZE", bx + 56, by + 35, FOCUS if selected else SUBTLE, scale=1)
+            if selected:
+                canvas.rect(bx, by + 8, 3, row_h - 21, FOCUS)
         if len(self.apps) > visible:
-            canvas.text("WHEEL", list_x + 8, y + height - 27, MUTED, scale=2, bold=True)
+            canvas.text("WHEEL", list_x + 8, y + height - 27, SUBTLE, scale=2, bold=True)
         self._draw_cursor(canvas)
         self._cached_render_key = key
         return canvas.image()

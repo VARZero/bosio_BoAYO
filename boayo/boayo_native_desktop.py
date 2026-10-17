@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
 """BoAYO desktop backed entirely by BOSIO Window Manager windows."""
 from __future__ import annotations
-import math, signal, time, sys
+import math, signal, time, sys, os
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from bosio_wm_client import BosioWMClient
 from boayo_shell import BoayoLauncherShell
+from boayo_surface_updates import SurfacePublisher
+from boayo_spatial_workspace import SpatialWorkspace
+from boayo_workspace_input import WorkspaceInput
 from bosio_window_manager import _direction, _basis
 
 
@@ -61,6 +64,19 @@ def click_launcher_at_gaze(wm, shell, wid, panel_az, panel_el, yaw, pitch):
     return True
 
 
+def open_dashboard(wm, shell, yaw, pitch):
+    """BTN0 summons the existing Dashboard, or starts its real app process."""
+    existing = next((w for w in wm.get_state().get("windows", ())
+                     if w.get("title") == "Dashboard" and w.get("workspace", {}).get("role") == "app"), None)
+    if existing:
+        wm.request_window_action(existing["window_id"], "restore", azimuth=yaw,
+                                 elevation=max(-85, min(85, pitch)))
+        return True
+    app = next((a for a in shell.apps if a.get("id") == "dashboard"), None)
+    shell.launch_pose = (yaw, max(-85, min(85, pitch)))
+    return shell.launch_app(app)
+
+
 class BTN2AppDrag:
     """Keep the BOSIO pointer pressed while BTN2 and the gaze are moving."""
 
@@ -92,7 +108,7 @@ class BTN2AppDrag:
 
 
 def main():
-    shell = BoayoLauncherShell(640, 360, "/home/xilinx/bosio_v2/boayo/apps.json")
+    shell = BoayoLauncherShell(640, 360, os.environ.get("BOAYO_APPS_PATH", str(Path(__file__).with_name("apps.json"))))
     hide_panel_requested = [False]
 
     def request_panel_hide(_signal, _frame):
@@ -100,10 +116,17 @@ def main():
 
     signal.signal(signal.SIGUSR1, request_panel_hide)
     with BosioWMClient("boayo-desktop") as wm:
+        if "spatial-workspace" not in wm.ping().get("features", ()):
+            raise RuntimeError("BoAYo spatial workspace requires the updated BOSIO software daemon")
+        workspace = SpatialWorkspace(wm)
+        workspace_input = WorkspaceInput(wm)
         win = wm.create_window("BoAYO Launcher", azimuth=0, elevation=0,
                                width_deg=42, height_deg=30,
                                surface_width=640, surface_height=360, always_on_top=True)
         wid = win["window_id"]
+        publisher = SurfacePublisher(wm, wid)
+        rect = shell.window
+        wm.configure_window(wid, shape=[[rect.x,rect.y,rect.width,rect.height,18]])
         panel_az, panel_el = 0.0, 0.0
         last = 0.0
         last_surface_key = None
@@ -138,6 +161,8 @@ def main():
                     panel_mapped = False
             last_mouse_left = mouse_left
             for event in wm.poll_events():
+                if workspace.handle_event(event):
+                    continue
                 if not panel_mapped or event.get("window_id") != wid:
                     continue
                 if event.get("type") not in ("pointer_motion", "pointer_button"):
@@ -161,8 +186,14 @@ def main():
             yaw = math.degrees(out.get("sensor_yaw_mrad", 0) / 1000.0)
             pitch = math.degrees(out.get("sensor_pitch_mrad", 0) / 1000.0)
             for event in wm.poll_button_events():
-                if event["pressed"] and event["button"] in (0, 1):
-                    # BTN0/BTN1 bring the single launcher panel to current gaze.
+                if event["pressed"] and event["button"] == 0:
+                    app_drag.release(yaw, pitch)
+                    if open_dashboard(wm, shell, yaw, pitch):
+                        hide_launcher(wm, shell, wid, "dashboard-button")
+                        panel_mapped = False
+                        print("BOAYO_DASHBOARD_FOCUS BTN0", flush=True)
+                elif event["pressed"] and event["button"] == 1:
+                    # BTN1 brings the app launcher to current gaze.
                     app_drag.release(yaw, pitch)
                     wm.configure_window(wid, azimuth=yaw, elevation=pitch, mapped=True)
                     wm.focus_window(wid, raise_window=True)
@@ -186,11 +217,17 @@ def main():
                             app_drag.press(yaw, pitch)
                     else:
                         app_drag.release(yaw, pitch)
+                elif event["button"] == 3 and event["pressed"]:
+                    wm.cancel_pointer()
+                    app_drag.held = False
+                    workspace.cancel()
             app_drag.move(yaw, pitch)
+            workspace_input.tick((wm.get_state().get("pointer") or {}), yaw, pitch, app_drag.held)
+            workspace.sync(wm.get_state())
             shell.tick(now - last); last = now
             surface_key = shell.render_key()
             if panel_mapped and surface_key != last_surface_key:
-                wm.update_surface(wid, shell.render())
+                publisher.publish(shell.render())
                 last_surface_key = surface_key
             time.sleep(1.0 / 30.0)
 

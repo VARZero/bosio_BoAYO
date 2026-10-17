@@ -1,6 +1,6 @@
 # BoAYo SDK 함수와 이벤트 안내
 
-이 문서는 BoAYo SDK **0.2.0**의 함수와 이벤트를 현재 코드 기준으로 설명합니다. 앱은 SDK로 창 이미지를 보내고, SDK는 이미지 아래에 캡션을 그립니다. Bosio 창 관리자는 구면 위치·창 겹침·포커스·정이십면체 프레임버퍼 합성을 맡습니다. 런처 **패널**은 앱 창과 다르며 캡션이 없습니다.
+이 문서는 BoAYo SDK **0.3.0**의 함수와 이벤트를 현재 코드 기준으로 설명합니다. 앱은 SDK로 창 이미지를 보내고, SDK는 제목과 가장자리 조작부를 그립니다. Bosio 창 관리자는 구면 위치·창 겹침·포커스·정이십면체 프레임버퍼 합성을 맡습니다. 런처 **패널**은 앱 창과 다르며 앱 프레임이 없습니다. 구면 보관·복원 조작은 [작업 공간 안내](SPATIAL_WORKSPACE.md)를 참고하세요.
 
 처음 앱을 만들 때는 [SDK 빠른 시작](SDK_QUICKSTART.md)을 읽으세요. 각 함수의 인자와 이벤트 필드를 찾을 때 이 문서를 참고할 수 있습니다. 보드에서 직접 앱을 실행한다면 `/home/xilinx/bosio_v2/boayo`와 `/home/xilinx/bosio_v2`를 `PYTHONPATH`에 넣어야 합니다.
 
@@ -62,6 +62,8 @@ window = sdk.create_window(
 | `window.present(draw_content)` | `draw_content(canvas, content)` 콜백으로 내용을 그리고 아래 캡션을 더한 뒤 RGB24 표면 전체를 Bosio에 보냅니다. `canvas`는 `BoayoSurface`, `content`는 `AppRect`입니다. 호출할 때마다 내용이 다시 제출됩니다. |
 | `window.present_rgb(rgb, fit="contain")` | `(높이, 너비, 3)` RGB NumPy 배열을 내용 영역에 bilinear 크기 조절로 넣고 캡션을 더합니다. `contain`은 비율을 유지하고 `stretch`는 내용 영역에 늘립니다. 배열은 `uint8`로 변환됩니다. |
 | `window.state` | 현재 로컬 창 상태의 `BoayoWindowState` 스냅샷입니다. |
+| `window.minimize()` | 정상 위치와 크기를 저장하고 축소 전환 후 보관합니다. 전환은 `sdk.poll_events()`에서 진행됩니다. |
+| `window.restore(azimuth=None, elevation=None)` | 저장한 위치로 복원하거나 지정한 각도에 배치합니다. |
 | `window.poll_events()` | SDK 내부에서 쓰는 단일 창 도우미입니다. **SDK를 사용하는 앱은 이 함수 대신 `sdk.poll_events()`를 호출하세요.** 두 함수를 섞으면 다른 창의 이벤트를 놓칠 수 있습니다. |
 
 일반 앱에서는 `BoayoApplicationWindow(...)` 생성자를 직접 호출하지 않고 `sdk.create_window()`를 사용하세요. `window.handle_event(raw)`, `window.apply_gaze_drag(azimuth, elevation)`, `window.cancel_drag()`는 캡션 입력과 창 밖 드래그를 SDK가 처리할 때 사용하는 함수입니다. 앱에서 직접 호출하면 SDK가 반환하는 이벤트와 실제 창 상태가 어긋날 수 있습니다.
@@ -79,6 +81,8 @@ window = sdk.create_window(
 | `content_width`, `content_height` | 캡션을 뺀 앱 내용 사각형의 고정 픽셀 크기. |
 | `focused` | SDK가 마지막으로 처리한 포커스 상태. |
 | `closed` | SDK 창 객체가 닫혔는지 여부. |
+| `minimized` | 창이 숨겨지고 구면 보관 카드로 표현되는 상태인지 여부. |
+| `interaction` | `idle`, `move`, `resize_left`, `resize_right`, `minimizing` 중 현재 조작 상태. |
 
 `sdk.window_state(window)`와 `window.state`의 내용은 같습니다. 포커스는 `sdk.poll_events()`에서 Bosio 이벤트를 처리한 후 갱신됩니다. SDK 밖에서 Bosio IPC로 창의 기하 정보를 직접 바꾼 경우 SDK의 로컬 객체가 자동으로 동기화되지 않습니다.
 
@@ -92,6 +96,7 @@ window = sdk.create_window(
 | `pointer_button` | **앱 내용 영역**에서 버튼을 누르거나 놓을 때 | `x`, `y`, `pressed`, `button` |
 | `focus` | Bosio가 해당 창에 포커스를 주거나 빼앗을 때 | `focused`, `state` |
 | `resize` | 캡션 조작으로 해당 창의 **각도 크기**가 이전 조회 이후 달라졌을 때 | `state.width_deg`, `state.height_deg` 등 |
+| `minimize` / `restore` | 보관 여부가 마지막 조회 이후 달라졌을 때 | `state.minimized`와 현재 창 상태 |
 
 `pointer_motion`/`pointer_button`의 `x`, `y`는 **캡션을 뺀 내용 영역 왼쪽 위가 (0, 0)**인 픽셀 좌표입니다. 부동소수점 값이고 오른쪽·아래쪽으로 증가합니다. `button`은 Bosio 입력 이름이며 왼쪽 클릭은 `"left"`입니다. `pressed`는 `pointer_button`에만 `True`/`False`이고 `pointer_motion`에서는 `None`입니다. 이 두 입력 이벤트의 `state`는 `None`입니다.
 

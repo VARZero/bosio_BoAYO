@@ -9,10 +9,11 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "boayo"), str(ROOT / "vendor" / "bosio_SphericalWM" / "sw")]
 
 from boayo_ui import PANEL, BoayoSurface
+from boayo_theme import CHROME
 from boayo_shell import BoayoScene, BoayoShell, BoayoLauncherShell, BoayoWorkspace
 from boayo_native_desktop import (BTN2AppDrag, click_launcher_at_gaze,
                                   launcher_contains_gaze, launcher_contains_point,
-                                  launcher_point_at_gaze)
+                                  launcher_point_at_gaze, open_dashboard)
 from boayo_app_window import BoayoAppFrame, BoayoApplicationWindow
 from boayo_sdk import BoayoSDK
 from bosio_view_simulator import render_bosio_view
@@ -34,6 +35,26 @@ class BoayoUITests(unittest.TestCase):
             self.assertFalse(click_launcher_at_gaze(wm, shell, 3, 0, 0, 19, 0))
         spawn.assert_not_called()
         wm.configure_window.assert_not_called()
+
+    def test_dashboard_button_launches_real_app_at_current_gaze(self):
+        shell = BoayoLauncherShell(640, 360, ROOT / "boayo" / "apps.json")
+        wm = Mock()
+        wm.get_state.return_value = {"windows": []}
+        with patch("boayo_shell.subprocess.Popen") as spawn:
+            self.assertTrue(open_dashboard(wm, shell, 28, -12))
+        self.assertEqual(shell.active_app["id"], "dashboard")
+        self.assertEqual(spawn.call_args.kwargs["env"]["BOAYO_APP_AZIMUTH"], "28")
+        self.assertEqual(spawn.call_args.kwargs["env"]["BOAYO_APP_ELEVATION"], "-12")
+
+    def test_dashboard_button_restores_existing_app_without_duplicate_process(self):
+        shell = BoayoLauncherShell()
+        wm = Mock()
+        wm.get_state.return_value = {"windows": [{"window_id": 7, "title": "Dashboard",
+            "workspace": {"role": "app", "state": "minimized"}}]}
+        with patch("boayo_shell.subprocess.Popen") as spawn:
+            self.assertTrue(open_dashboard(wm, shell, -42, 10))
+        spawn.assert_not_called()
+        wm.request_window_action.assert_called_once_with(7, "restore", azimuth=-42, elevation=10)
 
     def test_btn2_app_drag_keeps_press_until_release(self):
         wm = Mock()
@@ -150,16 +171,10 @@ class BoayoUITests(unittest.TestCase):
             rect = first.frame.content
             content_u = (rect.x + 20) / first.frame.width
             content_v = (rect.y + 30) / first.frame.height
-            close = second.frame.controls()["close"].mean(axis=0)
-            close_u = float(close[0]) / second.frame.width
-            close_v = float(close[1]) / second.frame.height
             wm.poll_events.return_value = [
                 {"type": "pointer_button", "window_id": 11, "button": "left", "pressed": True,
                  "u": content_u, "v": content_v},
-                {"type": "pointer_button", "window_id": 12, "button": "left", "pressed": True,
-                 "u": close_u, "v": close_v},
-                {"type": "pointer_button", "window_id": 12, "button": "left", "pressed": False,
-                 "u": close_u, "v": close_v},
+                {"type": "window_action", "window_id": 12, "action": "close"},
             ]
             events = sdk.poll_events()
             self.assertEqual(len(events), 1)
@@ -179,7 +194,7 @@ class BoayoUITests(unittest.TestCase):
             window.present_rgb(np.full((40, 80, 3), (20, 190, 70), dtype=np.uint8))
             image = wm.update_surface.call_args.args[1]
             self.assertTrue(np.any(np.all(image == (20, 190, 70), axis=2)))
-            self.assertTrue(np.any(np.all(image[window.frame.caption.y + 10] == PANEL, axis=1)))
+            self.assertTrue(np.any(np.all(image[window.frame.caption.y + 10] == (64, 96, 128), axis=1)))
 
     def test_application_caption_stays_within_its_surface_and_panel_has_none(self):
         for width in (260, 400, 640):
@@ -188,21 +203,20 @@ class BoayoUITests(unittest.TestCase):
                 self.assertGreaterEqual(polygon[:, 0].min(), frame.caption.x)
                 self.assertLessEqual(polygon[:, 0].max(), frame.caption.x + frame.caption.width)
             image = frame.render(lambda canvas, rect: canvas.rect(rect.x + 20, rect.y + 20, 25, 20, (52, 124, 255)))
-            self.assertTrue(np.all(image[45, frame.content.x + 25] == (52, 124, 255)))
-            self.assertTrue(np.any(np.all(image[frame.caption.y + 10] == PANEL, axis=1)))
+            self.assertTrue(np.all(image[frame.content.y + 25, frame.content.x + 25] == (52, 124, 255)))
+            self.assertTrue(np.any(np.all(image[frame.caption.y + 10] == (64, 96, 128), axis=1)))
         self.assertEqual(BoayoLauncherShell().caption_polygons(), {})
 
-    def test_application_caption_closes_only_on_a_completed_click(self):
-        wm = Mock()
-        wm.create_window.return_value = {"window_id": 7}
-        app = BoayoApplicationWindow(wm, "Demo", 0, 0, 38, 28)
-        point = app.frame.controls()["close"].mean(axis=0)
-        event = {"type": "pointer_button", "window_id": 7, "button": "left",
-                 "u": float(point[0]) / app.frame.width, "v": float(point[1]) / app.frame.height}
-        app.handle_event({**event, "pressed": True})
-        app.handle_event({**event, "pressed": False})
-        wm.destroy_window.assert_called_once_with(7)
-        self.assertTrue(app.closed)
+    def test_application_handles_are_detached_and_no_close_button_is_exposed(self):
+        frame = BoayoAppFrame(400, 300, "Demo")
+        self.assertEqual(set(frame.controls()), {"move", "resize_right"})
+        move = frame.controls()["move"]
+        self.assertLess(move[:, 0].max(), frame.shell.x)
+        self.assertGreater(frame.controls()["resize_right"][:, 0].min(), frame.shell.x + frame.shell.width)
+        image = frame.render(lambda *_: None)
+        gap = image[frame.height // 2, 31:frame.shell.x]
+        self.assertTrue(np.all(gap == (3, 5, 8)))
+        self.assertIsNone(frame.hit_test(40 / frame.width, .5))
 
     def test_application_caption_move_and_resize_configure_bosio_window(self):
         wm = Mock()
@@ -288,7 +302,7 @@ class BoayoUITests(unittest.TestCase):
     def test_launcher_launches_external_app_without_placeholder_surface(self):
         shell = BoayoLauncherShell(640, 360, ROOT / "boayo" / "apps.json")
         shell.selected_app = shell.apps[0]
-        shell.hovered = "content"
+        shell.pointer_motion(shell.window.x + shell.window.width * .5, shell.window.y + 35)
         with patch("boayo_shell.subprocess.Popen") as spawn:
             shell.pointer_button(True)
             shell.pointer_button(False)
@@ -356,10 +370,11 @@ class BoayoUITests(unittest.TestCase):
         shell = BoayoLauncherShell(640, 360, ROOT / "boayo" / "apps.json")
         first_key = shell.render_key()
         first = shell.render().copy()
-        shell.pointer_motion(320, 150)
+        shell.pointer_motion(100, 150)
         self.assertEqual(shell.render_key(), first_key)
         self.assertTrue(np.array_equal(shell.render(), first))
-        shell.selected_app = shell.apps[0]
+        shell.pointer_motion(320, 80)
+        self.assertIs(shell.hovered_app, shell.apps[0])
         self.assertNotEqual(shell.render_key(), first_key)
         self.assertFalse(np.array_equal(shell.render(), first))
 

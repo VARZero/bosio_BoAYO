@@ -1,0 +1,75 @@
+{
+  "output_m": 32,
+  "projectors": 2,
+  "bitstream_changed": false,
+  "host_boayo_tests": 42,
+  "host_compositor_tests": 14,
+  "board_cases": 8,
+  "partial_update": {
+    "name": "8x8_sdk_edit_reuses_other_app",
+    "backend": {
+      "mode": "fpga-dual+ps-incremental",
+      "hardware_frames": 51,
+      "fallback_frames": 0,
+      "windows": [
+        1,
+        10,
+        11
+      ],
+      "projected_windows": [
+        10
+      ],
+      "jobs_per_core": [
+        2,
+        1
+      ],
+      "written_cells_per_core": [
+        2044,
+        1024
+      ],
+      "hardware_ms": 2.9476189993147273,
+      "driver_ms": 8.912756999052363,
+      "shaped_windows": [
+        1,
+        10,
+        11
+      ],
+      "texture_upload_words": 281600,
+      "reused_window_tiles": 316,
+      "dirty_tiles": 3,
+      "changed_tiles": 1,
+      "total_hw_jobs": 1925,
+      "cached_window_tiles": 319,
+      "update_kind": "patch",
+      "output_words": 288,
+      "active_tiles": 125,
+      "compose_ms": 22.015673999703722,
+      "sampling": "fixed-point bilinear RGB332"
+    },
+    "performance": {
+      "render_count": 50,
+      "full_update_count": 0,
+      "patch_update_count": 41,
+      "update_words": 577024,
+      "no_op_update_count": 9,
+      "uptime_seconds": 337.9152816810001,
+      "average_compose_ms": 284.6022773601726,
+      "average_upload_ms": 53.36161072002142,
+      "last_compose_ms": 22.246197000640677,
+      "last_upload_ms": 18.737414999122848,
+      "frame_limit": 30.0
+    },
+    "reference": {
+      "tiles": 4220,
+      "cached_mismatched_words": 0,
+      "output_mismatched_words": 0,
+      "active_matches": true
+    },
+    "present_to_ack_ms": 128.57183999949484,
+    "sdk_rgb_bytes": 192,
+    "app_render_and_ipc_ms": 58.595188000253984
+  },
+  "live_output_fps": 59.84233093720664,
+  "fallback_frames": 0,
+  "dashboard_minimize_restore_passed": true
+}

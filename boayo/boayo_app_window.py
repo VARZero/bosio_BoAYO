@@ -7,9 +7,20 @@ uses the compositor background instead of pretending to provide alpha.
 from __future__ import annotations
 
 import math
+import time
 from dataclasses import dataclass
 
 import numpy as np
+
+try:
+    from boayo_surface_updates import SurfacePublisher
+except ImportError:
+    from .boayo_surface_updates import SurfacePublisher
+
+try:
+    from boayo_theme import CHROME, EDGE, FOCUS, TEXT, SUBTLE, DANGER
+except ImportError:
+    from .boayo_theme import CHROME, EDGE, FOCUS, TEXT, SUBTLE, DANGER
 
 try:
     from boayo_ui import ACCENT, BLACK, INK, MUTED, PANEL, WHITE, BoayoSurface, point_in_polygon, scaled_polygon
@@ -40,10 +51,12 @@ class BoayoWindowState:
     content_height: int
     focused: bool
     closed: bool
+    minimized: bool = False
+    interaction: str = "idle"
 
 
 class BoayoAppFrame:
-    """Draw app content and a caption box that stays within the window width."""
+    """Draw a continuous RGB frame with title and edge-mounted controls."""
 
     def __init__(self, width, height, title, accent=ACCENT):
         self.width, self.height = int(width), int(height)
@@ -52,20 +65,40 @@ class BoayoAppFrame:
         self.title = str(title)
         self.accent = tuple(accent)
         self.surface = BoayoSurface(width, height)
-        margin = max(12, round(self.width * .055))
-        self.content = AppRect(margin, 12, self.width - margin * 2, self.height - 88)
-        self.caption = AppRect(margin, self.height - 62, self.width - margin * 2, 48)
+        margin = 50
+        self.content = AppRect(margin, 48, self.width - margin * 2, self.height - 82)
+        self.shell = AppRect(48, 4, self.width - 96, self.height - 12)
+        self.caption = AppRect(0, 0, self.width, self.height)
+        self.focused = False
+        self.hovered = None
+        self.dragging = None
+        self.compact = False
+        mask = BoayoSurface(self.width, self.height, (0, 0, 0))
+        shell = self.shell
+        mask.rounded_rect(shell.x, shell.y, shell.width, shell.height, 14, (255,255,255))
+        coverage = mask.pixels[:,:,0]
+        self._clip_outside = coverage == 0
+        self._clip_edges = (coverage > 0) & (coverage < 255)
+        self._edge_alpha = coverage[self._clip_edges,None].astype(np.float32) / 255
+        self._chrome_key = None
+        self._chrome_pixels = None
 
     def controls(self):
-        box = self.caption
-        left, right = box.x, box.x + box.width
-        cy = box.y + box.height // 2
+        cy = self.height // 2
+        x, y = self.width - 36, self.height - 38
         return {
-            "resize_left": np.asarray(((left + 12, cy + 12), (left + 12, cy - 12), (left + 36, cy + 12)), dtype=np.float32),
-            "close": np.asarray(((left + 56, cy - 12), (left + 82, cy - 12), (left + 69, cy + 12)), dtype=np.float32),
-            "move": np.asarray(((left + 103, cy - 11), (left + 147, cy - 11), (left + 155, cy + 11), (left + 95, cy + 11)), dtype=np.float32),
-            "resize_right": np.asarray(((right - 36, cy + 12), (right - 12, cy - 12), (right - 12, cy + 12)), dtype=np.float32),
+            "move": np.asarray(((5, cy - 24), (29, cy - 24), (29, cy + 24), (5, cy + 24)), dtype=np.float32),
+            "resize_right": np.asarray(((x, y), (x + 28, y), (x + 28, y + 28), (x, y + 28)), dtype=np.float32),
         }
+
+    def shape_rects(self):
+        s = self.shell
+        rects = [[s.x, s.y, s.width, s.height, 14]]
+        for polygon in self.controls().values():
+            x,y = polygon.min(axis=0)
+            w,h = polygon.max(axis=0) - polygon.min(axis=0)
+            rects.append([float(x), float(y), float(w), float(h), 8])
+        return rects
 
     def hit_test(self, u, v):
         x, y = float(u) * self.width, float(v) * self.height
@@ -77,25 +110,70 @@ class BoayoAppFrame:
         return None
 
     def render(self, draw_content):
+        key = (self.title, self.accent, self.focused, self.hovered, self.dragging)
+        if key != self._chrome_key:
+            self._chrome_pixels = self._render_uncached(lambda canvas, rect: None).copy()
+            self._chrome_key = key
+        canvas = self.surface
+        canvas.pixels[:] = self._chrome_pixels
+        c = self.content
+        draw_content(canvas,c)
+        # App callbacks own the content rectangle; keep cached chrome intact.
+        canvas.pixels[:c.y] = self._chrome_pixels[:c.y]
+        canvas.pixels[c.y+c.height:] = self._chrome_pixels[c.y+c.height:]
+        canvas.pixels[c.y:c.y+c.height,:c.x] = self._chrome_pixels[c.y:c.y+c.height,:c.x]
+        canvas.pixels[c.y:c.y+c.height,c.x+c.width:] = self._chrome_pixels[c.y:c.y+c.height,c.x+c.width:]
+        return canvas.image()
+
+    def _render_uncached(self, draw_content):
         canvas = self.surface
         canvas.clear(BLACK)
-        c, box = self.content, self.caption
-        canvas.rounded_rect(c.x + 2, c.y + 3, c.width, c.height, 14, (13, 16, 21))
-        canvas.rounded_rect(c.x, c.y, c.width, c.height, 14, WHITE)
+        c, shell = self.content, self.shell
+        # The shell is separate from the two floating controls. Its title and
+        # status bands do not consume thick side borders around app content.
+        canvas.rounded_rect(shell.x, shell.y, shell.width, shell.height, 14, EDGE)
+        canvas.rounded_rect(shell.x + 1, shell.y + 1, shell.width - 2, shell.height - 2, 13, CHROME)
+        canvas.rect(c.x, 6, c.width, 40, (64, 96, 128))
+        canvas.rect(c.x, c.y, c.width, c.height, WHITE)
         draw_content(canvas, c)
-        canvas.rounded_rect(box.x + 2, box.y + 2, box.width, box.height, 12, (13, 16, 21))
-        canvas.rounded_rect(box.x, box.y, box.width, box.height, 12, PANEL)
+        canvas.rect(c.x, 46, c.width, 1, EDGE)
+        sy = c.y + c.height
+        canvas.rect(c.x, sy, c.width, 1, EDGE)
+        canvas.rect(c.x, sy + 1, c.width, 24, (32, 64, 96))
+        canvas.circle(shell.x + 14, 25, 3, FOCUS if self.focused else SUBTLE)
+        available = shell.width - 43
+        canvas.text(self.title[:max(1, available // 14)], shell.x + 27, 18, TEXT, scale=2, bold=True)
+        label = "ACTIVE" if self.focused else "SPATIAL"
+        if self.hovered == "move": label = "MOVE / DOWN TO STORE"
+        elif self.hovered == "resize_right": label = "RESIZE"
+        canvas.text(label, c.x + 10, sy + 9, SUBTLE, scale=1)
+        # Clip all bands to the rounded shell, including callbacks that fill
+        # their content rectangle. Only the perimeter receives the focus edge.
+        canvas.pixels[self._clip_outside] = BLACK
+        alpha = self._edge_alpha
+        canvas.pixels[self._clip_edges] = np.rint(
+            canvas.pixels[self._clip_edges]*alpha + np.asarray(BLACK,dtype=np.float32)*(1-alpha)
+        ).astype(np.uint8)
+        if self.focused:
+            canvas.rect(shell.x + 14, shell.y, shell.width - 28, 1, FOCUS)
         for name, polygon in self.controls().items():
-            # RGB332 represents (64,64,64) as true neutral gray. The previous
-            # (92,105,122) landed on a stronger green palette level on HDMI.
-            color = (216, 68, 55) if name == "close" else (64, 64, 64)
-            canvas.rounded_polygon(polygon, 5, color)
-        label_x = box.x + 170
-        available = box.width - 230
-        if available >= 70:
-            scale = 2 if available >= 120 else 1
-            chars = max(1, available // (7 * scale))
-            canvas.text(self.title[:chars], label_x, box.y + 17, INK, scale=scale, bold=True)
+            selected = name == self.hovered or name == self.dragging
+            x, y = polygon.min(axis=0)
+            w, h = polygon.max(axis=0) - polygon.min(axis=0)
+            canvas.rounded_rect(x, y, w, h, 8, FOCUS if selected else EDGE)
+            canvas.rounded_rect(x + 1, y + 1, w - 2, h - 2, 7, (96, 128, 160) if selected else (64, 64, 64))
+            if name == "move":
+                for dx in (8, 15):
+                    for dy in (12, 19, 26, 33):
+                        canvas.circle(x + dx, y + dy, 1, TEXT)
+            else:
+                # Diagonal expansion arrow, rather than a plus or triangle.
+                for step in range(12):
+                    canvas.rect(x + 8 + step, y + 20 - step, 2, 2, TEXT)
+                canvas.rect(x + 14, y + 8, 7, 2, TEXT)
+                canvas.rect(x + 19, y + 8, 2, 7, TEXT)
+                canvas.rect(x + 8, y + 14, 2, 7, TEXT)
+                canvas.rect(x + 8, y + 19, 7, 2, TEXT)
         return canvas.image()
 
 
@@ -109,8 +187,10 @@ class BoayoApplicationWindow:
         info = wm.create_window(title, azimuth=azimuth, elevation=elevation,
                                 width_deg=width_deg, height_deg=height_deg,
                                 surface_width=width, surface_height=height,
-                                decorated=False)
+                                decorated=False, workspace={"role": "app", "state": "open"},
+                                shape=self.frame.shape_rects())
         self.window_id = info["window_id"] if isinstance(info, dict) else int(info)
+        self.publisher = SurfacePublisher(wm, self.window_id)
         self.azimuth, self.elevation = float(azimuth), float(elevation)
         self.width_deg, self.height_deg = float(width_deg), float(height_deg)
         self.focused = bool(info.get("focused", True)) if isinstance(info, dict) else True
@@ -118,6 +198,15 @@ class BoayoApplicationWindow:
         self.last_drag_pose = None
         self.pressed_zone = None
         self.closed = False
+        self.minimized = False
+        self.minimize_elevation = -36.0
+        self.restore_geometry = None
+        self._transition = None
+        self._content = None
+        self._cancel_serial = 0
+        self.frame.focused = self.focused
+        self.frame.compact = self.width_deg < 24
+        self._keyboard_index = -1
 
     @property
     def state(self):
@@ -127,8 +216,86 @@ class BoayoApplicationWindow:
             self.width_deg, self.height_deg,
             self.frame.width, self.frame.height,
             self.frame.content.width, self.frame.content.height,
-            self.focused, self.closed,
+            self.focused, self.closed, self.minimized,
+            "minimizing" if self._transition else (self.drag[0] if self.drag else "idle"),
         )
+
+    def _geometry(self):
+        return dict(azimuth=self.azimuth, elevation=self.elevation,
+                    width_deg=self.width_deg, height_deg=self.height_deg)
+
+    def _publish(self, phase="open", **extra):
+        self.wm.configure_window(self.window_id, workspace={"role": "app", "state": phase,
+            "restore": self.restore_geometry or self._geometry(), **extra})
+
+    def minimize(self, normal_geometry=None):
+        if self.closed or self.minimized or self._transition:
+            return
+        self.restore_geometry = dict(normal_geometry or self._geometry())
+        self.cancel_drag()
+        self._transition = (time.monotonic(), self._geometry())
+        self._publish("minimizing", dock_azimuth=self.azimuth)
+
+    def restore(self, azimuth=None, elevation=None):
+        if self.closed:
+            return
+        geometry = dict(self.restore_geometry or self._geometry())
+        if azimuth is not None and elevation is not None:
+            geometry.update(azimuth=(float(azimuth) + 180) % 360 - 180,
+                            elevation=max(-85, min(85, float(elevation))))
+        self.azimuth, self.elevation = geometry["azimuth"], geometry["elevation"]
+        self.width_deg, self.height_deg = geometry["width_deg"], geometry["height_deg"]
+        self.minimized = False
+        self._transition = None
+        self.wm.configure_window(self.window_id, mapped=True, **geometry)
+        self.wm.focus_window(self.window_id)
+        self.focused = self.frame.focused = True
+        self._publish()
+        self.redraw()
+
+    def close(self):
+        if not self.closed:
+            self.cancel_drag()
+            self.wm.destroy_window(self.window_id)
+            self.closed = True
+
+    def tick(self, now=None):
+        if self._transition is None:
+            return
+        started, geometry = self._transition
+        progress = min(1.0, ((time.monotonic() if now is None else now) - started) / .22)
+        if progress >= 1:
+            self._transition = None
+            self.minimized = True
+            self.focused = self.frame.focused = False
+            self.wm.configure_window(self.window_id, mapped=False)
+            self._publish("minimized", dock_azimuth=geometry["azimuth"])
+        # Preserve geometry and RGB during the short transition. Shrinking and
+        # fading the whole window would invalidate all its cached projected tiles.
+        # The storage card supplies the visual state once the window is hidden.
+
+    def redraw(self, fade=0):
+        if self._content is None or self.minimized or self.closed:
+            return
+        def draw(canvas, rect):
+            canvas.pixels[rect.y:rect.y + rect.height, rect.x:rect.x + rect.width] = self._content
+        image = self.frame.render(draw)
+        if fade:
+            image = (image.astype(np.float32) * (1 - fade) + np.asarray(BLACK) * fade).astype(np.uint8)
+        self.publisher.publish(image)
+
+    def finish_drag(self, azimuth=None, elevation=None, cancelled=False):
+        if self.drag is None:
+            return
+        zone, _, _, base_az, base_el, base_w, base_h, _, _ = self.drag
+        if not cancelled and azimuth is not None and elevation is not None:
+            self.apply_gaze_drag(azimuth, elevation)
+        if not cancelled and zone == "move" and elevation is not None and elevation <= self.minimize_elevation:
+            self.minimize(dict(azimuth=base_az, elevation=base_el, width_deg=base_w, height_deg=base_h))
+        else:
+            self.cancel_drag()
+            self._publish()
+        self.redraw()
 
     @staticmethod
     def _gaze_at_surface(azimuth, elevation, width_deg, height_deg, u, v):
@@ -166,18 +333,29 @@ class BoayoApplicationWindow:
             self.azimuth = (base_az + factor * (new_w - base_w) / 2 + 180) % 360 - 180
             self.elevation = max(-89.5, min(89.5, base_el - (new_h - base_h) / 2))
             self.width_deg, self.height_deg = new_w, new_h
+            self.frame.compact = new_w < 24
             self.wm.configure_window(self.window_id, azimuth=self.azimuth,
                                      elevation=self.elevation, width_deg=new_w, height_deg=new_h)
+        self._publish("moving" if zone == "move" else "resizing",
+                      drop_candidate=zone == "move" and pose[1] <= self.minimize_elevation)
         return True
 
     def cancel_drag(self):
+        was_dragging = self.drag is not None
         self.drag = None
         self.last_drag_pose = None
         self.pressed_zone = None
+        self.frame.dragging = None
+        if was_dragging and hasattr(self.wm, "release_pointer"):
+            self.wm.release_pointer()
 
     def present(self, draw_content):
         """Draw content with a BoayoSurface callback; SDK adds the caption."""
-        self.wm.update_surface(self.window_id, self.frame.render(draw_content))
+        image = self.frame.render(draw_content)
+        rect = self.frame.content
+        self._content = image[rect.y:rect.y + rect.height, rect.x:rect.x + rect.width].copy()
+        if not self.minimized and not self._transition:
+            self.publisher.publish(image)
 
     def present_rgb(self, rgb, fit="contain"):
         """Put a rendered RGB image in the content area, then add the caption."""
@@ -217,10 +395,42 @@ class BoayoApplicationWindow:
         kind = event.get("type")
         if kind == "focus":
             self.focused = bool(event.get("focused"))
+            self.frame.focused = self.focused
+            self.redraw()
+            return None
+        if kind == "pointer_leave":
+            self.frame.hovered = None
+            self.redraw()
+            return None
+        if kind == "window_action":
+            action = event.get("action")
+            if action == "minimize":
+                self.minimize()
+            elif action == "restore":
+                self.restore(event.get("azimuth"), event.get("elevation"))
+            elif action == "close":
+                self.close()
+            return None
+        if kind == "pointer_cancel":
+            self.finish_drag(cancelled=True)
+            self.pressed_zone = None
+            return None
+        if kind == "key" and event.get("pressed"):
+            key = event.get("key")
+            if key == "tab":
+                names = list(self.frame.controls())
+                self._keyboard_index = (self._keyboard_index + 1) % len(names)
+                self.frame.hovered = names[self._keyboard_index]
+                self.redraw()
+            elif key == "escape":
+                self.finish_drag(cancelled=True)
+            return None
+        if self.minimized or self._transition:
             return None
         if kind == "pointer_button" and event.get("button") == "left":
             zone = self.frame.hit_test(event.get("u", -1), event.get("v", -1))
             if event.get("pressed"):
+                self._cancel_serial = event.get("cancel_serial", self._cancel_serial)
                 self.pressed_zone = zone
                 if zone in ("move", "resize_left", "resize_right"):
                     start_az, start_el = self._gaze_at_surface(
@@ -231,14 +441,21 @@ class BoayoApplicationWindow:
                                  self.azimuth, self.elevation, self.width_deg, self.height_deg,
                                  start_az, start_el)
                     self.last_drag_pose = None
+                    self.frame.dragging = zone
+                    if hasattr(self.wm, "capture_pointer"):
+                        self.wm.capture_pointer(self.window_id)
+                    self._publish("moving" if zone == "move" else "resizing")
+                    self.redraw()
                 return zone
             if self.drag is not None:
-                self.cancel_drag()
-            elif zone == "close" and self.pressed_zone == "close":
-                self.wm.destroy_window(self.window_id)
-                self.closed = True
+                self.finish_drag(event.get("azimuth"), event.get("elevation"))
             self.pressed_zone = None
             return zone
+        if kind == "pointer_motion" and self.drag is None:
+            hovered = self.frame.hit_test(event.get("u", -1), event.get("v", -1))
+            if hovered != self.frame.hovered:
+                self.frame.hovered = hovered
+                self.redraw()
         if kind == "pointer_motion" and self.drag is not None:
             if "azimuth" in event and "elevation" in event:
                 return self.apply_gaze_drag(event["azimuth"], event["elevation"])
