@@ -75,21 +75,89 @@ class SpatialIntegrationTests(unittest.TestCase):
         underneath = m.render().reshape(-1,3).copy()
         self.assertTrue(np.array_equal(front[gap], underneath[gap]))
         m.configure_window("app", self.window.window_id, mapped=True)
-        az,el = self.window._gaze_at_surface(179,4,38,28,40/399,150/299)
+        az,el = self.window._gaze_at_surface(179,4,38,28,40/399,70/299)
         self.assertEqual(m.hit_test(az,el)[0].window_id, lower["window_id"])
-        point = self.window.frame.controls()["move"].mean(axis=0)
-        az,el = self.window._gaze_at_surface(179,4,38,28,float(point[0])/399,float(point[1])/299)
-        self.assertEqual(m.hit_test(az,el)[0].window_id, self.window.window_id)
+        m.focus_window(self.window.window_id)
+        self.sdk.poll_events()
+        control = m.windows[self.window.caption.ids["move"]]
+        self.assertEqual(m.hit_test(control.azimuth, control.elevation)[0].window_id, control.window_id)
 
     def press_move(self):
-        point = self.window.frame.controls()["move"].mean(axis=0)
-        az, el = self.window._gaze_at_surface(self.window.azimuth, self.window.elevation,
-            self.window.width_deg, self.window.height_deg,
-            float(point[0]) / self.window.frame.width, float(point[1]) / self.window.frame.height)
+        self.manager.focus_window(self.window.window_id)
+        self.sdk.poll_events()
+        control = self.manager.windows[self.window.caption.ids["move"]]
+        az, el = control.azimuth, control.elevation
         self.manager.pointer_warp(az, el)
         self.manager.pointer_button("left", True)
         self.sdk.poll_events()
         return az, el
+
+    def test_close_button_routes_through_shape_and_closes_only_its_window(self):
+        other = self.sdk.create_window("Other", azimuth=100, elevation=4)
+        self.manager.focus_window(self.window.window_id)
+        self.sdk.poll_events()
+        control = self.manager.windows[self.window.caption.ids["close"]]
+        az, el = control.azimuth, control.elevation
+        self.assertEqual(self.manager.hit_test(az, el)[0].window_id, control.window_id)
+        self.manager.pointer_warp(az, el)
+        self.manager.pointer_button("left", True)
+        self.sdk.poll_events()
+        self.assertFalse(self.window.closed)
+        self.manager.pointer_button("left", False)
+        self.sdk.poll_events()
+        self.assertTrue(self.window.closed)
+        self.assertNotIn(self.window.window_id, self.manager.windows)
+        self.assertNotIn(self.window.window_id, self.sdk.windows)
+        self.assertIn(other.window_id, self.manager.windows)
+        self.assertFalse(other.closed)
+
+    def test_caption_size_survives_resize_and_only_active_app_has_buttons(self):
+        other = self.sdk.create_window("Large surface", azimuth=100, elevation=4,
+                                       width=640, height=440, width_deg=60, height_deg=45)
+        other.present(lambda *_: None)
+        self.sdk.poll_events()
+        self.assertFalse(self.window.focused)
+        self.assertTrue(all(not self.manager.windows[wid].mapped for wid in self.window.caption.ids.values()))
+        self.assertEqual(self.window.frame.content.width, 300)
+        for width, height in ((10, 8), (38, 28), (100, 80)):
+            other.width_deg, other.height_deg = width, height
+            other.wm.configure_window(other.window_id, width_deg=width, height_deg=height)
+            other.caption.sync()
+            for wid in other.caption.ids.values():
+                control = self.manager.windows[wid]
+                self.assertTrue(control.mapped)
+                self.assertEqual((control.width_deg, control.height_deg), (4, 4))
+                self.assertEqual((control.surface_width, control.surface_height), (40, 40))
+            self.assertEqual((other.frame.content.width, other.frame.content.height), (540, 358))
+        close = self.manager.windows[other.caption.ids["close"]]
+        self.manager.pointer_warp(close.azimuth, close.elevation)
+        self.manager.pointer_button("left", True)
+        self.sdk.poll_events()
+        self.assertTrue(other.focused)  # A caption press keeps its owner active.
+        self.assertTrue(all(self.manager.windows[wid].mapped for wid in other.caption.ids.values()))
+        self.manager.cancel_pointer()
+        self.sdk.poll_events()
+        self.assertFalse(other.closed)
+        revision = self.manager.generation
+        self.sdk.poll_events()
+        self.assertEqual(self.manager.generation, revision)  # Idle captions cause no updates.
+
+    def test_resize_via_caption_keeps_button_size_and_content_resolution(self):
+        resize = self.manager.windows[self.window.caption.ids["resize_right"]]
+        az, el = resize.azimuth, resize.elevation
+        self.manager.pointer_warp(az, el)
+        self.manager.pointer_button("left", True)
+        self.sdk.poll_events()
+        self.manager.pointer_warp(az+8, el-5)
+        self.sdk.poll_events()
+        self.manager.pointer_button("left", False)
+        self.sdk.poll_events()
+        self.assertAlmostEqual(self.window.width_deg, 46)
+        self.assertAlmostEqual(self.window.height_deg, 33)
+        self.assertEqual((self.window.frame.width, self.window.frame.height), (400, 300))
+        for wid in self.window.caption.ids.values():
+            button = self.manager.windows[wid]
+            self.assertEqual((button.width_deg, button.height_deg), (4, 4))
 
     def minimize(self):
         self.window.minimize()

@@ -9,14 +9,24 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "boayo"), str(ROOT / "vendor" / "bosio_SphericalWM" / "sw")]
 
 from boayo_ui import PANEL, BoayoSurface
-from boayo_theme import CHROME
+from boayo_theme import CHROME, DANGER, TEXT
 from boayo_shell import BoayoScene, BoayoShell, BoayoLauncherShell, BoayoWorkspace
 from boayo_native_desktop import (BTN2AppDrag, click_launcher_at_gaze,
                                   launcher_contains_gaze, launcher_contains_point,
                                   launcher_point_at_gaze, open_dashboard)
 from boayo_app_window import BoayoAppFrame, BoayoApplicationWindow
 from boayo_sdk import BoayoSDK
+from boayo_caption import button_image
 from bosio_view_simulator import render_bosio_view
+
+
+def mock_window_ids(wm, *app_ids, focused=True):
+    apps = iter(app_ids)
+    captions = iter(range(1000, 2000))
+    def create(*args, **kwargs):
+        wid = next(captions) if kwargs.get("workspace", {}).get("role") == "caption" else next(apps)
+        return {"window_id": wid, "focused": focused}
+    wm.create_window.side_effect = create
 
 
 class BoayoUITests(unittest.TestCase):
@@ -72,7 +82,7 @@ class BoayoUITests(unittest.TestCase):
 
     def test_sdk_drag_continues_after_pointer_leaves_window(self):
         wm = Mock()
-        wm.create_window.return_value = {"window_id": 25}
+        mock_window_ids(wm, 25)
         with BoayoSDK("drag-app", wm=wm) as sdk:
             window = sdk.create_window("Drag", azimuth=10, elevation=-30)
             point = window.frame.controls()["move"].mean(axis=0)
@@ -98,7 +108,7 @@ class BoayoUITests(unittest.TestCase):
 
     def test_sdk_reports_window_size_and_focus_without_resizing_rgb_surface(self):
         wm = Mock()
-        wm.create_window.return_value = {"window_id": 26, "focused": True}
+        mock_window_ids(wm, 26)
         wm.get_state.return_value = {"pointer": {"buttons": []}}
         with BoayoSDK("state-app", wm=wm) as sdk:
             window = sdk.create_window("State", width_deg=38, height_deg=28,
@@ -111,15 +121,15 @@ class BoayoUITests(unittest.TestCase):
             point = window.frame.controls()["resize_right"].mean(axis=0)
             u, v = float(point[0]) / 400, float(point[1]) / 300
             wm.poll_events.side_effect = [[
-                {"type": "focus", "window_id": 26, "focused": False},
+                {"type": "focus", "window_id": 26, "focused": True},
                 {"type": "pointer_button", "window_id": 26, "button": "left",
                  "pressed": True, "u": u, "v": v},
                 {"type": "pointer_motion", "window_id": 26, "u": u + .1, "v": v},
             ], []]
             events = sdk.poll_events()
             self.assertEqual([event.type for event in events], ["focus", "resize"])
-            self.assertFalse(events[0].focused)
-            self.assertFalse(window.focused)
+            self.assertTrue(events[0].focused)
+            self.assertTrue(window.focused)
             self.assertAlmostEqual(events[1].state.width_deg, 41.8)
             self.assertEqual((events[1].state.surface_width, events[1].state.surface_height),
                              (400, 300))
@@ -128,7 +138,7 @@ class BoayoUITests(unittest.TestCase):
 
     def test_sdk_emits_resize_when_caption_drag_leaves_window(self):
         wm = Mock()
-        wm.create_window.return_value = {"window_id": 27}
+        mock_window_ids(wm, 27)
         with BoayoSDK("off-window-resize", wm=wm) as sdk:
             window = sdk.create_window("Resize", azimuth=10, elevation=-30)
             point = window.frame.controls()["resize_right"].mean(axis=0)
@@ -153,6 +163,7 @@ class BoayoUITests(unittest.TestCase):
 
     def test_caption_gray_is_neutral_for_rgb332_palette(self):
         frame = BoayoAppFrame(400, 300, "Color")
+        frame.focused = True
         image = frame.render(lambda *_: None)
         point = frame.controls()["move"].mean(axis=0).astype(int)
         self.assertEqual(tuple(image[point[1], point[0]]), (64, 64, 64))
@@ -164,7 +175,7 @@ class BoayoUITests(unittest.TestCase):
 
     def test_sdk_routes_content_events_between_multiple_windows(self):
         wm = Mock()
-        wm.create_window.side_effect = [{"window_id": 11}, {"window_id": 12}]
+        mock_window_ids(wm, 11, 12)
         with BoayoSDK("two-windows", wm=wm) as sdk:
             first = sdk.create_window("First", azimuth=0, elevation=0)
             second = sdk.create_window("Second", azimuth=20, elevation=0)
@@ -188,11 +199,11 @@ class BoayoUITests(unittest.TestCase):
 
     def test_sdk_can_present_rendered_rgb_inside_boayo_caption(self):
         wm = Mock()
-        wm.create_window.return_value = {"window_id": 21}
+        mock_window_ids(wm, 21)
         with BoayoSDK("image-app", wm=wm) as sdk:
             window = sdk.create_window("Image", azimuth=0, elevation=0)
             window.present_rgb(np.full((40, 80, 3), (20, 190, 70), dtype=np.uint8))
-            image = wm.update_surface.call_args.args[1]
+            image = next(c.args[1] for c in wm.update_surface.call_args_list if c.args[0] == window.window_id)
             self.assertTrue(np.any(np.all(image == (20, 190, 70), axis=2)))
             self.assertTrue(np.any(np.all(image[window.frame.caption.y + 10] == (64, 96, 128), axis=1)))
 
@@ -207,9 +218,9 @@ class BoayoUITests(unittest.TestCase):
             self.assertTrue(np.any(np.all(image[frame.caption.y + 10] == (64, 96, 128), axis=1)))
         self.assertEqual(BoayoLauncherShell().caption_polygons(), {})
 
-    def test_application_handles_are_detached_and_no_close_button_is_exposed(self):
+    def test_application_handles_are_detached_and_close_is_visible(self):
         frame = BoayoAppFrame(400, 300, "Demo")
-        self.assertEqual(set(frame.controls()), {"move", "resize_right"})
+        self.assertEqual(set(frame.controls()), {"move", "resize_right", "close"})
         move = frame.controls()["move"]
         self.assertLess(move[:, 0].max(), frame.shell.x)
         self.assertGreater(frame.controls()["resize_right"][:, 0].min(), frame.shell.x + frame.shell.width)
@@ -218,9 +229,50 @@ class BoayoUITests(unittest.TestCase):
         self.assertTrue(np.all(gap == (3, 5, 8)))
         self.assertIsNone(frame.hit_test(40 / frame.width, .5))
 
+    def test_close_button_is_large_visible_and_outside_app_content(self):
+        for width, height in ((240, 170), (400, 300), (640, 440)):
+            frame = BoayoAppFrame(width, height, "A long application title")
+            frame.focused = True
+            poly = frame.controls()["close"]
+            x, y = poly.min(axis=0).astype(int)
+            w, h = (poly.max(axis=0) - poly.min(axis=0)).astype(int)
+            self.assertGreaterEqual(min(w, h), 40)
+            self.assertGreater(x, frame.shell.x + frame.shell.width)
+            self.assertEqual(frame.hit_test((x+w/2)/width, (y+h/2)/height), "close")
+            image = frame.render(lambda canvas, rect: canvas.clear((0, 0, 0)))
+            button = image[y:y+h, x:x+w]
+            self.assertTrue(np.any(np.all(button == DANGER, axis=2)))
+            self.assertTrue(np.any(np.all(button == TEXT, axis=2)))
+
+    def test_close_requires_matching_press_release_and_respects_cancellation(self):
+        wm = Mock()
+        mock_window_ids(wm, 9)
+        app = BoayoApplicationWindow(wm, "Demo", 10, 5, 38, 28)
+        point = app.frame.controls()["close"].mean(axis=0)
+        event = dict(type="pointer_button", window_id=9, button="left",
+                     u=float(point[0])/app.frame.width, v=float(point[1])/app.frame.height)
+        app.handle_event(dict(event, pressed=False))
+        wm.destroy_window.assert_not_called()
+        for cancellation in (
+            dict(event, pressed=False, u=.5, v=.5),
+            dict(type="pointer_cancel", window_id=9),
+            dict(type="pointer_leave", window_id=9),
+            dict(type="key", window_id=9, key="escape", pressed=True),
+        ):
+            app.handle_event(dict(event, pressed=True))
+            wm.destroy_window.assert_not_called()
+            app.handle_event(cancellation)
+            app.handle_event(dict(event, pressed=False))
+            self.assertFalse(app.closed)
+        app.handle_event(dict(event, pressed=True))
+        app.handle_event(dict(event, pressed=False))
+        self.assertTrue(app.closed)
+        app.handle_event(dict(event, pressed=False))
+        self.assertEqual(wm.destroy_window.call_args_list.count(call(9)), 1)
+
     def test_application_caption_move_and_resize_configure_bosio_window(self):
         wm = Mock()
-        wm.create_window.return_value = {"window_id": 9}
+        mock_window_ids(wm, 9)
         app = BoayoApplicationWindow(wm, "Demo", 10, 5, 38, 28)
         point = app.frame.controls()["move"].mean(axis=0)
         u, v = float(point[0]) / app.frame.width, float(point[1]) / app.frame.height
@@ -233,7 +285,8 @@ class BoayoUITests(unittest.TestCase):
         u, v = float(point[0]) / app.frame.width, float(point[1]) / app.frame.height
         app.handle_event({"type": "pointer_button", "window_id": 9, "button": "left", "pressed": True, "u": u, "v": v})
         app.handle_event({"type": "pointer_motion", "window_id": 9, "u": u + .1, "v": v})
-        wm.configure_window.assert_called_with(9, width_deg=41.8, height_deg=28.0)
+        self.assertAlmostEqual(wm.configure_window.call_args.kwargs["width_deg"], 41.8)
+        self.assertEqual(wm.configure_window.call_args.kwargs["height_deg"], 28.0)
 
     def test_content_surface_and_components(self):
         surface = BoayoSurface(160, 100)

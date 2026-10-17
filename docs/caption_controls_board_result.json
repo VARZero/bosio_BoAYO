@@ -1,0 +1,1 @@
+{"passed": true, "sizes": [{"app": [10, 8], "buttons": [[4.0, 4.0], [4.0, 4.0], [4.0, 4.0]]}, {"app": [38, 28], "buttons": [[4.0, 4.0], [4.0, 4.0], [4.0, 4.0]]}, {"app": [100, 80], "buttons": [[4.0, 4.0], [4.0, 4.0], [4.0, 4.0]]}], "close": "only target and its controls destroyed", "render_error": null, "output_error": false}

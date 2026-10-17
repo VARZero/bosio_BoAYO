@@ -20,7 +20,7 @@ REMOTE_ROOT = "/home/xilinx/bosio_v2"
 REMOTE_APP = posixpath.join(REMOTE_ROOT, "boayo")
 BITSTREAM = posixpath.join(REMOTE_ROOT, "bitstream/bosio_output_disp.bit")
 PYTHON = "/usr/local/share/pynq-venv/bin/python3"
-FILES = ("boayo_surface_updates.py", "boayo_ui.py", "boayo_theme.py", "boayo_shell.py", "boayo_app_window.py", "boayo_sdk.py", "boayo_spatial_workspace.py", "boayo_workspace_input.py", "boayo_desktop.py", "boayo_native_desktop.py", "boayo_example_app.py", "boayo_telemetry_app.py", "boayo_pulse_app.py", "bosio_view_simulator.py", "wait_for_bosio.py", "apps.json", "boayo-desktop.service")
+FILES = ("boayo_surface_updates.py", "boayo_ui.py", "boayo_theme.py", "boayo_shell.py", "boayo_caption.py", "boayo_app_window.py", "boayo_sdk.py", "boayo_spatial_workspace.py", "boayo_workspace_input.py", "boayo_desktop.py", "boayo_native_desktop.py", "boayo_example_app.py", "boayo_telemetry_app.py", "boayo_pulse_app.py", "bosio_view_simulator.py", "wait_for_bosio.py", "apps.json", "boayo-desktop.service")
 PY_FILES = tuple(name for name in FILES if name.endswith(".py"))
 
 

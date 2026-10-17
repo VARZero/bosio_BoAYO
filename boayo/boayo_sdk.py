@@ -100,7 +100,7 @@ class BoayoSDK:
         owned = self.windows.pop(wid, None)
         if owned is None:
             raise ValueError("window is not owned by this BoayoSDK instance")
-        self.wm.destroy_window(wid)
+        owned.close()
         self._reported_sizes.pop(wid, None)
         self._reported_visibility.pop(wid, None)
         owned.closed = True
@@ -113,11 +113,13 @@ class BoayoSDK:
         for raw in self.wm.poll_events():
             window = self.windows.get(raw.get("window_id"))
             if window is None:
+                window = next((w for w in self.windows.values() if w.caption.owns(raw.get("window_id"))), None)
+            if window is None:
                 continue
             kind = raw.get("type")
             area = None
             x = y = None
-            if kind in ("pointer_motion", "pointer_button"):
+            if kind in ("pointer_motion", "pointer_button") and raw.get("window_id") == window.window_id:
                 u, v = float(raw.get("u", -1)), float(raw.get("v", -1))
                 area = window.frame.hit_test(u, v)
                 if area == "content" and window.drag is None and not window.minimized and not window._transition:

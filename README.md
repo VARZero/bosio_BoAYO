@@ -81,9 +81,9 @@ BTN1로 런처를 다시 열 수 있습니다.
 
 ## BoAYo 애플리케이션 창과 캡션
 
-Bosio 스택은 구면 창의 위치, 포커스, 겹침과 HDMI 투영을 맡습니다. BoAYo 애플리케이션은 `boayo_app_window.py`의 `BoayoApplicationWindow`로 Bosio 창을 하나 만들고, BoAYo 표면에서 앱 내용과 아래 캡션을 함께 그려 그 창에 전달합니다. 예제 Dashboard와 Telemetry가 이 경로를 사용합니다. 런처 패널은 `BoayoLauncherShell`로 따로 그리며 캡션이 없습니다.
+Bosio 스택은 구면 창의 위치, 포커스, 겹침과 HDMI 투영을 맡습니다. BoAYo 애플리케이션은 `boayo_app_window.py`의 `BoayoApplicationWindow`로 앱 내용과 제목을 그리고, `boayo_caption.py`에서 바깥 캡션 버튼을 관리합니다. 예제 Dashboard와 Telemetry가 이 경로를 사용합니다. 런처 패널은 `BoayoLauncherShell`로 따로 그리며 캡션이 없습니다.
 
-현재 Bosio IPC 표면은 RGB24이므로 창 내부의 실제 알파 투명도는 전달하지 않습니다. 앱 프레임 안쪽 가장자리에 이동·크기 조절 손잡이를 배치하고 위쪽에 제목과 닫기 조작부를 표시합니다. BTN2 시선 클릭이 Bosio 창 이벤트를 거쳐 해당 BoAYo 컨트롤에 전달됩니다.
+활성 앱 창에만 이동·크기 조절·닫기 버튼을 표시합니다. 세 버튼은 모두 4°×4°이며, 앱 창의 각도 크기나 그림 해상도와 관계없이 같은 크기를 유지합니다. 앱 내부 콘텐츠는 기존처럼 창 크기에 따라 확대·축소됩니다. 버튼은 별도 RGB 표면과 둥근 모양 영역을 사용하며, 비활성 창에서는 표시와 입력을 함께 숨깁니다. BTN2 시선 클릭이 Bosio 창 이벤트를 거쳐 해당 BoAYo 컨트롤에 전달됩니다. 오른쪽 위 빨간 × 버튼에서 눌렀다 떼면 해당 앱 창과 그 버튼들만 닫힙니다. 버튼 밖으로 벗어나거나 취소하면 닫지 않습니다. 버튼을 조작하는 동안에는 소유 앱을 계속 활성 창으로 취급합니다.
 
 여러 앱에서 사용할 공개 Python API는 `boayo_sdk.py`의 `BoayoSDK`입니다. 앱은 SDK로 창을 만들고 내용만 그립니다. SDK는 캡션과 Bosio 이벤트 분배를 담당합니다. [SDK 빠른 시작](docs/SDK_QUICKSTART.md)에 앱 코드와 이미지 전달, 여러 창 사용 예제가 있습니다.
 SDK 0.2.0부터 `sdk.window_state(window)`로 각도 크기·그림 표면 픽셀 크기·포커스를 읽고, `sdk.poll_events()`의 `resize`/`focus` 이벤트로 변경에 반응할 수 있습니다. 각도 크기를 바꿔도 RGB 그림 표면의 픽셀 수는 그대로입니다.
