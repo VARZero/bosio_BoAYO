@@ -60,3 +60,24 @@ BTN3은 취소다. 기존 기본 배포 스크립트와 M=16 경로를 이번 �
 
 원시 결과는 `boayo_m32_validation.json`, `boayo_live_dashboard.json`이다.
 고해상도는 M=32 구면 셀 분할을 의미하며 HDMI 출력 모드를 변경한 것은 아니다.
+
+## 부팅 시 Dashboard 자동 시작
+
+`boayo-desktop.service`에 `BOAYO_STARTUP_DASHBOARD=1` 환경 변수를 설정하면
+출력 장면과 센서가 준비된 뒤 Dashboard를 현재 시선 위치에 한 번 엽니다.
+런처는 숨겨지고 BTN1로 다시 열 수 있습니다.
+
+현재 보드에는 `/etc/systemd/system/boayo-desktop.service.d/startup.conf`를
+추가했으며 WM과 데스크톱 서비스의 부팅 자동 실행을 활성화했습니다.
+시작 대기 제한은 WM 준비 대기 시간보다 긴 240초입니다.
+
+```ini
+[Service]
+Environment=BOAYO_STARTUP_DASHBOARD=1
+TimeoutStartSec=240
+```
+
+검증된 서비스와 자동 시작 설정은 `deploy/m32/`에 보관했습니다. 서비스는
+현재 보드의 배포 경로를 사용하므로, 다른 위치에 배포할 때는 경로를 맞춰야 합니다.
+출력 타일의 활성 여부가 바뀔 때 하드웨어 타일 목록을 다시 읽는 OutputCore
+드라이버 수정이 포함된 WM 버전을 사용합니다. 기존 M=32 비트스트림은 유지합니다.

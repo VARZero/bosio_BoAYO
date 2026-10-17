@@ -134,6 +134,7 @@ def main():
         app_drag = BTN2AppDrag(wm)
         last_left_press_serial = (wm.get_state().get("pointer") or {}).get("left_press_serial")
         last_mouse_left = False
+        startup_dashboard = os.environ.get("BOAYO_STARTUP_DASHBOARD", "0") == "1"
         while True:
             now = time.monotonic()
             if hide_panel_requested[0]:
@@ -185,6 +186,13 @@ def main():
             out = state.get("output") or {}
             yaw = math.degrees(out.get("sensor_yaw_mrad", 0) / 1000.0)
             pitch = math.degrees(out.get("sensor_pitch_mrad", 0) / 1000.0)
+            if startup_dashboard and out.get("scene_valid") and (
+                    not out.get("sensor_mode") or out.get("sensor_active")):
+                if open_dashboard(wm, shell, yaw, pitch):
+                    hide_launcher(wm, shell, wid, "startup-dashboard")
+                    panel_mapped = False
+                    startup_dashboard = False
+                    print(f"BOAYO_DASHBOARD_FOCUS startup az={yaw:.2f} el={pitch:.2f}", flush=True)
             for event in wm.poll_button_events():
                 if event["pressed"] and event["button"] == 0:
                     app_drag.release(yaw, pitch)
